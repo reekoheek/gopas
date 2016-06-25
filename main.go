@@ -15,7 +15,7 @@ type Dependency struct {
 	Name, Version string
 }
 
-type AppData struct {
+type Options struct {
 	GOPASFILE  string
 	WATCHES    []string
 	IGNORES    []string
@@ -110,7 +110,7 @@ func (r *Runner) Kill() error {
 
 type ScanCallback func(path string)
 
-var data AppData
+var data Options
 
 func readOutPipe(out io.ReadCloser) {
 	b := make([]byte, 1)
@@ -279,7 +279,7 @@ func actionRun() {
 }
 
 func bootstrap() {
-	data = AppData{
+	data = Options{
 		GOPASFILE:  "gopasfile",
 		WATCHES:    []string{"."},
 		IGNORES:    []string{".git", ".gopath"},
@@ -305,14 +305,14 @@ func main() {
 		switch os.Args[1] {
 		case "list":
 			actionList()
+			return
 		case "install":
 			actionInstall()
-		case "help":
-			actionHelp()
+			return
 		case "run":
 			actionRun()
-		default:
-			actionHelp()
+			return
 		}
 	}
+	actionHelp()
 }
