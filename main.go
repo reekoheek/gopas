@@ -312,13 +312,20 @@ func actionHelp() {
  * Run action
  */
 func actionRun() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "Usage: gopas run <file>")
 		os.Exit(1)
 	}
 
+	file := os.Args[2]
+
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "File %s not exists\n", file)
+		os.Exit(1)
+	}
+
 	runner := &Runner{
-		file: os.Args[2],
+		file: file,
 	}
 
 	fmt.Println(">> Watches    ", strings.Join(options.Watches, ", "))
