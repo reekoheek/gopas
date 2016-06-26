@@ -298,14 +298,21 @@ func actionInstall() {
  * Help action
  */
 func actionHelp() {
-	fmt.Println("Usage: gopas <action> [<args...>]")
+	fmt.Println("Gopas is a tool to build Go outside GOPATH")
 	fmt.Println("")
-	fmt.Println("Actions:")
-	fmt.Println("  list     List all dependencies")
-	fmt.Println("  install  Install dependencies")
-	fmt.Println("  run      Run go code")
-	fmt.Println("  test     Test project")
-	fmt.Println("  help     Show help")
+	fmt.Println("Usage:")
+	fmt.Println("")
+	fmt.Println("  gopas <action> [<args...>]")
+	fmt.Println("")
+	fmt.Println("The actions are:")
+	fmt.Println("")
+	fmt.Println("  build    compile packages and dependencies")
+	fmt.Println("  help     show help")
+	fmt.Println("  install  compile and install packages and dependencies")
+	fmt.Println("  list     list dependencies")
+	fmt.Println("  run      compile and run Go program")
+	fmt.Println("  test     test packages")
+	fmt.Println("")
 }
 
 /**
@@ -320,7 +327,7 @@ func actionRun() {
 	file := os.Args[2]
 
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File %s not exists\n", file)
+		fmt.Fprintf(os.Stderr, "File \"%s\" is not exists\n", file)
 		os.Exit(1)
 	}
 
