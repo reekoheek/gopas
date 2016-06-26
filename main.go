@@ -1,35 +1,68 @@
 package main
 
-import "fmt"
-import "os"
-import "os/exec"
-import "io"
-import "io/ioutil"
-import "strings"
-import "path/filepath"
-import "bufio"
-import "time"
-import "runtime"
+/**
+ * Imports
+ */
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+)
 
+/**
+ * Dependency type
+ */
 type Dependency struct {
 	Name, Version string
 }
 
+/**
+ * Options type
+ */
 type Options struct {
-	GOPASFILE  string
-	WATCHES    []string
-	IGNORES    []string
-	EXTENSIONS []string
-	MODIFIED   time.Time
+	GopasFile  string
+	Watches    []string
+	Ignores    []string
+	Extensions []string
 }
 
+/**
+ * Runner type
+ */
 type Runner struct {
 	file    string
 	command *exec.Cmd
 }
 
+/**
+ * ScanCallback type
+ */
+type ScanCallback func(path string)
+
+/**
+ * Global variables
+ */
+var (
+	options      Options
+	modifiedTime time.Time = time.Now()
+	cwd          string    = getCwd()
+)
+
+/**
+ * Run command
+ *
+ * @return {*exec.Cmd}
+ * @return {error}
+ */
 func (r *Runner) Run() (*exec.Cmd, error) {
-	if r.command == nil || r.Exited() {
+	if r.command == nil || r.IsExited() {
 		err := r.runBin()
 		// time.Sleep(250 * time.Millisecond)
 		return r.command, err
@@ -39,21 +72,34 @@ func (r *Runner) Run() (*exec.Cmd, error) {
 
 }
 
-func (r *Runner) Exited() bool {
+/**
+ * Check wether runner command already exit
+ *
+ * @return {bool}
+ */
+func (r *Runner) IsExited() bool {
 	return r.command != nil && r.command.ProcessState != nil && r.command.ProcessState.Exited()
 }
 
+/**
+ * Run bin
+ *
+ * @return {error}
+ */
 func (r *Runner) runBin() error {
+	// cwd := cwd()
 	fmt.Printf(">> Running \"go run %s\"\n", r.file)
 
 	r.command = exec.Command("go", "run", r.file)
-	env := []string{fmt.Sprintf("GOPATH=%s", cwd()+"/.gopath")}
+	// r.command = exec.Command("go", "env")
+	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
 	for _, v := range os.Environ() {
 		if !strings.HasPrefix(v, "GOPATH=") {
 			env = append(env, v)
 		}
 	}
 	r.command.Env = env
+	r.command.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
 
 	stdout, err := r.command.StdoutPipe()
 	if err != nil {
@@ -76,6 +122,11 @@ func (r *Runner) runBin() error {
 	return nil
 }
 
+/**
+ * Kill runner command
+ *
+ * @return {error}
+ */
 func (r *Runner) Kill() error {
 	if r.command != nil && r.command.Process != nil {
 		done := make(chan error)
@@ -108,34 +159,12 @@ func (r *Runner) Kill() error {
 	return nil
 }
 
-type ScanCallback func(path string)
-
-var data Options
-
-func readOutPipe(out io.ReadCloser) {
-	b := make([]byte, 1)
-	for {
-		ch, err := out.Read(b)
-		if ch > 0 {
-			os.Stdout.Write(b)
-		} else if err == io.EOF {
-			break
-		}
-	}
-}
-
-func readErrPipe(err io.ReadCloser) {
-	b := make([]byte, 1)
-	for {
-		ch, e := err.Read(b)
-		if ch > 0 {
-			os.Stdout.Write(b)
-		} else if e == io.EOF {
-			break
-		}
-	}
-}
-
+/**
+ * Read dependencies listed on filename
+ *
+ * @param {string} filename
+ * @return {[]Dependency}
+ */
 func readDependencies(filename string) []Dependency {
 	dependencies := []Dependency{}
 
@@ -159,7 +188,12 @@ func readDependencies(filename string) []Dependency {
 	return dependencies
 }
 
-func cwd() string {
+/**
+ * Get current working directory
+ *
+ * @return {string}
+ */
+func getCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, ">> Getwd Error: %s\n", err.Error())
@@ -168,9 +202,14 @@ func cwd() string {
 	return cwd
 }
 
+/**
+ * Check whether path is ignorable
+ *
+ * @param {string} path
+ */
 func isIgnorable(path string) bool {
 	ignorable := false
-	for _, ignore := range data.IGNORES {
+	for _, ignore := range options.Ignores {
 		if matched, _ := filepath.Match(ignore, path); matched {
 			ignorable = true
 			break
@@ -179,8 +218,13 @@ func isIgnorable(path string) bool {
 	return ignorable
 }
 
+/**
+ * Check whether path having acceptable extension
+ *
+ * @param {string} path
+ */
 func isAcceptable(path string) bool {
-	for _, ext := range data.EXTENSIONS {
+	for _, ext := range options.Extensions {
 		if strings.HasSuffix(path, "."+ext) {
 			return true
 		}
@@ -189,16 +233,21 @@ func isAcceptable(path string) bool {
 	return false
 }
 
+/**
+ * Scan changes and invoke callback on file changes
+ *
+ * @param  {ScanCallback}   cb ScanCallback
+ */
 func scanChanges(cb ScanCallback) {
 	for {
-		for _, dir := range data.WATCHES {
+		for _, dir := range options.Watches {
 			filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 				if isIgnorable(path) {
 					return filepath.SkipDir
 				}
 
-				if isAcceptable(path) && info.ModTime().After(data.MODIFIED) {
-					data.MODIFIED = time.Now()
+				if isAcceptable(path) && info.ModTime().After(modifiedTime) {
+					modifiedTime = time.Now()
 					cb(path)
 				}
 				return nil
@@ -209,9 +258,12 @@ func scanChanges(cb ScanCallback) {
 	}
 }
 
+/**
+ * List action
+ */
 func actionList() {
 	depCount := 0
-	dependencies := readDependencies(data.GOPASFILE)
+	dependencies := readDependencies(options.GopasFile)
 	for _, dep := range dependencies {
 		fmt.Printf("%s %s\n", dep.Name, dep.Version)
 		depCount++
@@ -219,11 +271,14 @@ func actionList() {
 	fmt.Printf("dependencies(%d)\n", depCount)
 }
 
+/**
+ * Install action
+ */
 func actionInstall() {
-	dependencies := readDependencies(data.GOPASFILE)
+	dependencies := readDependencies(options.GopasFile)
 	for _, dep := range dependencies {
 		cmd := exec.Command("go", "get", dep.Name)
-		env := []string{fmt.Sprintf("GOPATH=%s", cwd()+"/.gopath")}
+		env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
 		for _, v := range os.Environ() {
 			if !strings.HasPrefix(v, "GOPATH=") {
 				env = append(env, v)
@@ -239,6 +294,9 @@ func actionInstall() {
 	}
 }
 
+/**
+ * Help action
+ */
 func actionHelp() {
 	fmt.Println("Usage: gopas <action> [<args...>]")
 	fmt.Println("")
@@ -246,9 +304,13 @@ func actionHelp() {
 	fmt.Println("  list     List all dependencies")
 	fmt.Println("  install  Install dependencies")
 	fmt.Println("  run      Run go code")
+	fmt.Println("  test     Test project")
 	fmt.Println("  help     Show help")
 }
 
+/**
+ * Run action
+ */
 func actionRun() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: gopas run <file>")
@@ -259,9 +321,9 @@ func actionRun() {
 		file: os.Args[2],
 	}
 
-	fmt.Println(">> Watches    ", strings.Join(data.WATCHES, ", "))
-	fmt.Println(">> Extensions ", strings.Join(data.EXTENSIONS, ", "))
-	fmt.Println(">> Ignores    ", strings.Join(data.IGNORES, ", "))
+	fmt.Println(">> Watches    ", strings.Join(options.Watches, ", "))
+	fmt.Println(">> Extensions ", strings.Join(options.Extensions, ", "))
+	fmt.Println(">> Ignores    ", strings.Join(options.Ignores, ", "))
 
 	runner.Run()
 	go scanChanges(func(path string) {
@@ -278,13 +340,55 @@ func actionRun() {
 	}
 }
 
+/**
+ * Test action
+ */
+func actionTest() {
+	// cwd := cwd()
+	cmd := exec.Command("go", "test")
+	cmd.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
+	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(v, "GOPATH=") {
+			env = append(env, v)
+		}
+	}
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	cmd.Wait()
+}
+
+/**
+ * Build action
+ */
+func actionBuild() {
+	// cwd := cwd()
+	cmd := exec.Command("go", "build")
+	cmd.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
+	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(v, "GOPATH=") {
+			env = append(env, v)
+		}
+	}
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	cmd.Wait()
+}
+
+/**
+ * Bootstrap project options and gopath dir
+ */
 func bootstrap() {
-	data = Options{
-		GOPASFILE:  "gopasfile",
-		WATCHES:    []string{"."},
-		IGNORES:    []string{".git", ".gopath"},
-		EXTENSIONS: []string{"go"},
-		MODIFIED:   time.Now(),
+	options = Options{
+		GopasFile:  "gopasfile",
+		Watches:    []string{"."},
+		Ignores:    []string{".git", ".gopath"},
+		Extensions: []string{"go"},
 	}
 
 	if _, err := os.Stat(".gopath"); os.IsNotExist(err) {
@@ -294,10 +398,21 @@ func bootstrap() {
 		}
 	}
 
-	cwd := cwd()
-	os.Symlink(cwd, ".gopath/src/"+filepath.Base(cwd))
+	// cwd := cwd()
+	os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
+
+	// FIXME workaround, cannot read module on vendor dir
+	if files, err := ioutil.ReadDir("vendor"); err == nil {
+		for _, file := range files {
+			name := file.Name()
+			os.Symlink(cwd+"/vendor/"+name, cwd+"/.gopath/src/"+name)
+		}
+	}
 }
 
+/**
+ * main function
+ */
 func main() {
 	bootstrap()
 
@@ -311,6 +426,12 @@ func main() {
 			return
 		case "run":
 			actionRun()
+			return
+		case "build":
+			actionBuild()
+			return
+		case "test":
+			actionTest()
 			return
 		}
 	}
