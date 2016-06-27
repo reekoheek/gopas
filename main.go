@@ -11,7 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	// "runtime"
 	"strings"
 	"time"
 )
@@ -136,13 +136,13 @@ func (r *Runner) Kill() error {
 		}()
 
 		//Trying a "soft" kill first
-		if runtime.GOOS == "windows" {
-			if err := r.command.Process.Kill(); err != nil {
-				return err
-			}
-		} else if err := r.command.Process.Signal(os.Interrupt); err != nil {
+		// if runtime.GOOS == "windows" {
+		if err := r.command.Process.Kill(); err != nil {
 			return err
 		}
+		// } else if err := r.command.Process.Signal(os.Interrupt); err != nil {
+		// 	return err
+		// }
 
 		//Wait for our process to die before we return or hard kill after 3 sec
 		select {
@@ -254,7 +254,7 @@ func scanChanges(cb ScanCallback) {
 			})
 		}
 
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
@@ -342,6 +342,8 @@ func actionRun() {
 	runner.Run()
 	go scanChanges(func(path string) {
 		runner.Kill()
+		bootstrap()
+		time.Sleep(250 * time.Millisecond)
 		runner.Run()
 	})
 
@@ -349,6 +351,8 @@ func actionRun() {
 	for scanner.Scan() {
 		if scanner.Text() == "rs" {
 			runner.Kill()
+			bootstrap()
+			time.Sleep(250 * time.Millisecond)
 			runner.Run()
 		}
 	}
@@ -398,13 +402,7 @@ func actionBuild() {
  * Bootstrap project options and gopath dir
  */
 func bootstrap() {
-	options = Options{
-		GopasFile:  "gopasfile",
-		Watches:    []string{"."},
-		Ignores:    []string{".git", ".gopath"},
-		Extensions: []string{"go"},
-	}
-
+	fmt.Println(">> Bootstrapping...")
 	if _, err := os.Stat(".gopath"); os.IsNotExist(err) {
 		if os.MkdirAll(".gopath/src", 0755) != nil {
 			fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
@@ -412,22 +410,34 @@ func bootstrap() {
 		}
 	}
 
-	// cwd := cwd()
-	os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
-
-	// FIXME workaround, cannot read module on vendor dir
-	if files, err := ioutil.ReadDir("vendor"); err == nil {
-		for _, file := range files {
-			name := file.Name()
-			os.Symlink(cwd+"/vendor/"+name, cwd+"/.gopath/src/"+name)
-		}
+	if err := os.RemoveAll(cwd + "/.gopath/src/" + filepath.Base(cwd)); err != nil {
+		fmt.Println(err)
 	}
+	copy_folder(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
+
+	// os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
+
+	// // FIXME workaround, cannot read module on vendor dir
+	// if files, err := ioutil.ReadDir("vendor"); err == nil {
+	// 	for _, file := range files {
+	// 		name := file.Name()
+	// 		// os.RemoveAll(cwd + "/.gopath/src/" + name)
+	// 		os.Symlink(cwd+"/vendor/"+name, cwd+"/.gopath/src/"+name)
+	// 	}
+	// }
 }
 
 /**
  * main function
  */
 func main() {
+	options = Options{
+		GopasFile:  "gopasfile",
+		Watches:    []string{"."},
+		Ignores:    []string{".git", ".gopath"},
+		Extensions: []string{"go"},
+	}
+
 	bootstrap()
 
 	if len(os.Args) > 1 {
@@ -450,4 +460,71 @@ func main() {
 		}
 	}
 	actionHelp()
+}
+
+func copy_folder(source string, dest string) (err error) {
+
+	sourceinfo, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(dest, sourceinfo.Mode())
+	if err != nil {
+		return err
+	}
+
+	directory, _ := os.Open(source)
+
+	objects, err := directory.Readdir(-1)
+
+	for _, obj := range objects {
+
+		sourcefilepointer := source + "/" + obj.Name()
+
+		destinationfilepointer := dest + "/" + obj.Name()
+
+		if obj.IsDir() {
+			if obj.Name() != ".gopath" {
+				err = copy_folder(sourcefilepointer, destinationfilepointer)
+				if err != nil {
+					fmt.Println(err)
+				}
+			}
+		} else {
+			err = copy_file(sourcefilepointer, destinationfilepointer)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+
+	}
+	return
+}
+
+func copy_file(source string, dest string) (err error) {
+	sourcefile, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+
+	defer sourcefile.Close()
+
+	destfile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+
+	defer destfile.Close()
+
+	_, err = io.Copy(destfile, sourcefile)
+	if err == nil {
+		sourceinfo, err := os.Stat(source)
+		if err != nil {
+			err = os.Chmod(dest, sourceinfo.Mode())
+		}
+
+	}
+
+	return
 }
