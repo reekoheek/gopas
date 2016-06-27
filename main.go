@@ -350,6 +350,7 @@ func actionRun() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		if scanner.Text() == "rs" {
+			time.Sleep(700 * time.Millisecond)
 			runner.Kill()
 			bootstrap()
 			time.Sleep(250 * time.Millisecond)
@@ -411,12 +412,11 @@ func bootstrap() {
 	}
 
 	if err := os.RemoveAll(cwd + "/.gopath/src/" + filepath.Base(cwd)); err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
 	}
 	copy_folder(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
 
 	// os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
-
 	// // FIXME workaround, cannot read module on vendor dir
 	// if files, err := ioutil.ReadDir("vendor"); err == nil {
 	// 	for _, file := range files {
