@@ -37,7 +37,8 @@ type Options struct {
  * Runner type
  */
 type Runner struct {
-	file    string
+	name    string
+	args    []string
 	command *exec.Cmd
 }
 
@@ -88,9 +89,9 @@ func (r *Runner) IsExited() bool {
  */
 func (r *Runner) runBin() error {
 	// cwd := cwd()
-	fmt.Printf(">> Running \"go run %s\"\n", r.file)
+	fmt.Println(">> Running", r.name, r.args)
 
-	r.command = exec.Command("go", "run", r.file)
+	r.command = exec.Command(r.name, r.args...)
 	// r.command = exec.Command("go", "env")
 	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
 	for _, v := range os.Environ() {
@@ -324,15 +325,16 @@ func actionRun() {
 		os.Exit(1)
 	}
 
-	file := os.Args[2]
-
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "File \"%s\" is not exists\n", file)
-		os.Exit(1)
+	for _, file := range os.Args[2:] {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "File \"%s\" is not exists\n", file)
+			os.Exit(1)
+		}
 	}
 
 	runner := &Runner{
-		file: file,
+		name: "go",
+		args: append([]string{"run"}, os.Args[2:]...),
 	}
 
 	fmt.Println(">> Watches    ", strings.Join(options.Watches, ", "))
