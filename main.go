@@ -89,7 +89,7 @@ func (r *Runner) IsExited() bool {
  */
 func (r *Runner) runBin() error {
 	// cwd := cwd()
-	fmt.Println(">> Running", r.name, r.args)
+	fmt.Printf(">> Running \"%s %s\"\n", r.name, strings.Join(r.args, " "))
 
 	r.command = exec.Command(r.name, r.args...)
 	// r.command = exec.Command("go", "env")
@@ -255,7 +255,7 @@ func scanChanges(cb ScanCallback) {
 			})
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
@@ -345,17 +345,17 @@ func actionRun() {
 	go scanChanges(func(path string) {
 		runner.Kill()
 		bootstrap()
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		runner.Run()
 	})
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		if scanner.Text() == "rs" {
-			time.Sleep(700 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			runner.Kill()
 			bootstrap()
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			runner.Run()
 		}
 	}
