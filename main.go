@@ -312,6 +312,7 @@ func actionHelp() {
 	fmt.Println("  install  compile and install packages and dependencies")
 	fmt.Println("  list     list dependencies")
 	fmt.Println("  run      compile and run Go program")
+  fmt.Println("  reset    reset local .gopath")
 	fmt.Println("  test     test packages")
 	fmt.Println("")
 }
@@ -321,13 +322,45 @@ func actionHelp() {
  */
 func actionRun() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: gopas run <file>")
+		fmt.Fprintln(os.Stderr, "Usage: gopas run <file...>")
 		os.Exit(1)
 	}
 
 	for _, file := range os.Args[2:] {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "File \"%s\" is not exists\n", file)
+			fmt.Fprintf(os.Stderr, "Run Error: File \"%s\" is not exists\n", file)
+			os.Exit(1)
+		}
+	}
+
+	args := append([]string{"run"}, os.Args[2:]...)
+	cmd := exec.Command("go", args...)
+	cmd.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
+	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(v, "GOPATH=") {
+			env = append(env, v)
+		}
+	}
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Start()
+	cmd.Wait()
+}
+
+/**
+ * Watch action
+ */
+func actionWatch() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "Usage: gopas watch <file...>")
+		os.Exit(1)
+	}
+
+	for _, file := range os.Args[2:] {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Watch Error: File \"%s\" is not exists\n", file)
 			os.Exit(1)
 		}
 	}
@@ -365,7 +398,6 @@ func actionRun() {
  * Test action
  */
 func actionTest() {
-	// cwd := cwd()
 	cmd := exec.Command("go", "test")
 	cmd.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
 	env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
@@ -405,7 +437,6 @@ func actionBuild() {
  * Bootstrap project options and gopath dir
  */
 func bootstrap() {
-	fmt.Println(">> Bootstrapping...")
 	if _, err := os.Stat(".gopath"); os.IsNotExist(err) {
 		if os.MkdirAll(".gopath/src", 0755) != nil {
 			fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
@@ -413,20 +444,25 @@ func bootstrap() {
 		}
 	}
 
-	if err := os.RemoveAll(cwd + "/.gopath/src/" + filepath.Base(cwd)); err != nil {
-		fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
-	}
-	copy_folder(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
-
-	// os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
-	// // FIXME workaround, cannot read module on vendor dir
-	// if files, err := ioutil.ReadDir("vendor"); err == nil {
-	// 	for _, file := range files {
-	// 		name := file.Name()
-	// 		// os.RemoveAll(cwd + "/.gopath/src/" + name)
-	// 		os.Symlink(cwd+"/vendor/"+name, cwd+"/.gopath/src/"+name)
-	// 	}
+	// if err := os.RemoveAll(cwd + "/.gopath/src/" + filepath.Base(cwd)); err != nil {
+	// 	fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
 	// }
+	// copy_folder(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
+
+	os.Symlink(cwd, cwd+"/.gopath/src/"+filepath.Base(cwd))
+	// FIXME workaround, cannot read module on vendor dir
+	if files, err := ioutil.ReadDir("vendor"); err == nil {
+		for _, file := range files {
+			name := file.Name()
+			os.Symlink(cwd+"/vendor/"+name, cwd+"/.gopath/src/"+name)
+		}
+	}
+}
+
+func actionReset() {
+  if err := os.RemoveAll(cwd + "/.gopath"); err != nil {
+    fmt.Fprintf(os.Stderr, ">> Cannot reseting local gopath")
+  }
 }
 
 /**
@@ -456,77 +492,83 @@ func main() {
 		case "build":
 			actionBuild()
 			return
+    case "reset":
+      actionReset()
+      return
 		case "test":
 			actionTest()
+			return
+		case "watch":
+			actionWatch()
 			return
 		}
 	}
 	actionHelp()
 }
 
-func copy_folder(source string, dest string) (err error) {
+// func copy_folder(source string, dest string) (err error) {
 
-	sourceinfo, err := os.Stat(source)
-	if err != nil {
-		return err
-	}
+// 	sourceinfo, err := os.Stat(source)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	err = os.MkdirAll(dest, sourceinfo.Mode())
-	if err != nil {
-		return err
-	}
+// 	err = os.MkdirAll(dest, sourceinfo.Mode())
+// 	if err != nil {
+// 		return err
+// 	}
 
-	directory, _ := os.Open(source)
+// 	directory, _ := os.Open(source)
 
-	objects, err := directory.Readdir(-1)
+// 	objects, err := directory.Readdir(-1)
 
-	for _, obj := range objects {
+// 	for _, obj := range objects {
 
-		sourcefilepointer := source + "/" + obj.Name()
+// 		sourcefilepointer := source + "/" + obj.Name()
 
-		destinationfilepointer := dest + "/" + obj.Name()
+// 		destinationfilepointer := dest + "/" + obj.Name()
 
-		if obj.IsDir() {
-			if obj.Name() != ".gopath" {
-				err = copy_folder(sourcefilepointer, destinationfilepointer)
-				if err != nil {
-					fmt.Println(err)
-				}
-			}
-		} else {
-			err = copy_file(sourcefilepointer, destinationfilepointer)
-			if err != nil {
-				fmt.Println(err)
-			}
-		}
+// 		if obj.IsDir() {
+// 			if obj.Name() != ".gopath" {
+// 				err = copy_folder(sourcefilepointer, destinationfilepointer)
+// 				if err != nil {
+// 					fmt.Println(err)
+// 				}
+// 			}
+// 		} else {
+// 			err = copy_file(sourcefilepointer, destinationfilepointer)
+// 			if err != nil {
+// 				fmt.Println(err)
+// 			}
+// 		}
 
-	}
-	return
-}
+// 	}
+// 	return
+// }
 
-func copy_file(source string, dest string) (err error) {
-	sourcefile, err := os.Open(source)
-	if err != nil {
-		return err
-	}
+// func copy_file(source string, dest string) (err error) {
+// 	sourcefile, err := os.Open(source)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	defer sourcefile.Close()
+// 	defer sourcefile.Close()
 
-	destfile, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
+// 	destfile, err := os.Create(dest)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	defer destfile.Close()
+// 	defer destfile.Close()
 
-	_, err = io.Copy(destfile, sourcefile)
-	if err == nil {
-		sourceinfo, err := os.Stat(source)
-		if err != nil {
-			err = os.Chmod(dest, sourceinfo.Mode())
-		}
+// 	_, err = io.Copy(destfile, sourcefile)
+// 	if err == nil {
+// 		sourceinfo, err := os.Stat(source)
+// 		if err != nil {
+// 			err = os.Chmod(dest, sourceinfo.Mode())
+// 		}
 
-	}
+// 	}
 
-	return
-}
+// 	return
+// }
