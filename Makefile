@@ -1,2 +1,10 @@
-default:
-	go build -o gopas main.go
+default: build
+
+build:
+	gopas build
+
+install: gopas
+	mv gopas $(GOPATH)/bin
+
+test:
+	gopas test

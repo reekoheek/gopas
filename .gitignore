@@ -1,2 +1,3 @@
 gopas
 *.sublime-*
+.gopath
