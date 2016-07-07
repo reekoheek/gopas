@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -24,17 +25,24 @@ type Project interface {
 	Dependencies() []Dependency
 	Clean() error
 	Install(dependency Dependency) error
-	Run() error
+	Run(args []string) error
 	Test() error
 	Build() error
+
+	Name() string
 }
 
 type ProjectImpl struct {
-	Cwd          string
-	Watches      []string
-	Ignores      []string
-	Extensions   []string
+	Cwd string
+	//Watches      []string
+	//Ignores      []string
+	//Extensions   []string
 	dependencies []Dependency
+	exeGo        string
+}
+
+func (p *ProjectImpl) Name() string {
+	return filepath.Base(p.Cwd)
 }
 
 func (p *ProjectImpl) Dependencies() []Dependency {
@@ -66,7 +74,7 @@ func (p *ProjectImpl) Install(dependency Dependency) error {
 	srcDir := filepath.Join(gopathDir, "src")
 
 	runner := &Runner{
-		Name: "go",
+		Name: p.exeGo,
 		Args: []string{"get", dependency.Name},
 		Dir:  srcDir,
 		Env: []string{
@@ -77,15 +85,14 @@ func (p *ProjectImpl) Install(dependency Dependency) error {
 	if err != nil {
 		return err
 	}
-	command.Wait()
-	return nil
+	return command.Wait()
 }
 
 func (p *ProjectImpl) Build() error {
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
 	runner := &Runner{
-		Name: "go",
+		Name: p.exeGo,
 		Args: []string{"build"},
 		Dir:  projectDir,
 		Env: []string{
@@ -96,33 +103,35 @@ func (p *ProjectImpl) Build() error {
 	if err != nil {
 		return err
 	}
-	command.Wait()
-	return nil
+	return command.Wait()
 }
 
-func (p *ProjectImpl) Run() error {
-	p.Build()
+func (p *ProjectImpl) Run(args []string) error {
+	//p.Build()
 
-	gopathDir := filepath.Join(p.Cwd, ".gopath")
-	projectBase := filepath.Base(p.Cwd)
-	projectDir := filepath.Join(gopathDir, "src", projectBase)
-	projectExe := filepath.Join(projectDir, projectBase)
+	//gopathDir := filepath.Join(p.Cwd, ".gopath")
+	//projectBase := filepath.Base(p.Cwd)
+	//projectDir := filepath.Join(gopathDir, "src", projectBase)
+	//projectExe := filepath.Join(projectDir, projectBase)
+
+	projectExe := filepath.Join(p.Cwd, filepath.Base(p.Cwd))
 	runner := &Runner{
 		Name: projectExe,
+		Args: args,
 	}
+
 	command, err := runner.Run()
 	if err != nil {
 		return err
 	}
-	command.Wait()
-	return nil
+	return command.Wait()
 }
 
 func (p *ProjectImpl) Test() error {
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
 	runner := &Runner{
-		Name: "go",
+		Name: p.exeGo,
 		Args: []string{"test"},
 		Dir:  projectDir,
 		Env: []string{
@@ -133,14 +142,18 @@ func (p *ProjectImpl) Test() error {
 	if err != nil {
 		return err
 	}
-	command.Wait()
-	return nil
+	return command.Wait()
 }
 
 /**
  * Bootstrap project options and gopath dir
  */
 func (p *ProjectImpl) Bootstrap() error {
+	var err error
+	if p.exeGo, err = exec.LookPath("go"); err != nil {
+		return errors.New("Please install go")
+	}
+
 	if "" == p.Cwd {
 		return errors.New("Cwd is undefined")
 	}

@@ -1,33 +1,12 @@
 package main
 
-// /**
-//  * Install action
-//  */
-// func actionInstall() {
-// 	dependencies := readDependencies(options.GopasFile)
-// 	for _, dep := range dependencies {
-// 		cmd := exec.Command("go", "get", dep.Name)
-// 		env := []string{fmt.Sprintf("GOPATH=%s", cwd+"/.gopath")}
-// 		for _, v := range os.Environ() {
-// 			if !strings.HasPrefix(v, "GOPATH=") {
-// 				env = append(env, v)
-// 			}
-// 		}
-// 		cmd.Env = env
-// 		cmd.Start()
-// 		if err := cmd.Wait(); err != nil {
-// 			fmt.Fprintf(os.Stderr, ">> Install Error: %s\n", err.Error())
-// 			os.Exit(1)
-// 		}
-// 		fmt.Printf(">> Installing \"go get %s\"\n", dep.Name)
-// 	}
-// }
-
 /**
  * Imports
  */
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/urfave/cli.v1"
 )
@@ -43,10 +22,10 @@ func main() {
 
 	tool := &Tool{
 		Project: &ProjectImpl{
-			Cwd:        cwd,
-			Watches:    []string{"."},
-			Ignores:    []string{".git", ".gopath"},
-			Extensions: []string{"go"},
+			Cwd: cwd,
+			//Watches:    []string{"."},
+			//Ignores:    []string{".git", ".gopath"},
+			//Extensions: []string{"go"},
 		},
 	}
 
@@ -79,8 +58,13 @@ func main() {
 			Action: tool.DoList,
 		},
 		{
-			Name:   "run",
-			Usage:  "run executable",
+			Name:  "run",
+			Usage: "run executable",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "exec, x",
+				},
+			},
 			Action: tool.DoRun,
 		},
 		{
@@ -89,29 +73,11 @@ func main() {
 			Action: tool.DoTest,
 		},
 	}
-	app.Run(os.Args)
 
-	//	if len(os.Args) > 1 {
-	//		switch os.Args[1] {
-	//		case "build":
-	//			tool.DoBuild()
-	//			return
-	//		case "clean":
-	//			tool.DoClean()
-	//			return
-	//		case "install":
-	//			tool.DoInstall()
-	//			return
-	//		case "list":
-	//			tool.DoList()
-	//			return
-	//		case "run":
-	//			tool.DoRun()
-	//			return
-	//		case "test":
-	//			tool.DoTest()
-	//			return
-	//		}
-	//	}
-	//	tool.DoHelp()
+	if err := app.Run(os.Args); err != nil {
+		if !strings.HasPrefix(err.Error(), "exit status") {
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
+		os.Exit(1)
+	}
 }

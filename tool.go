@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"gopkg.in/urfave/cli.v1"
 )
@@ -36,63 +37,60 @@ func (t *Tool) Bootstrap() error {
 
 func (t *Tool) DoList(c *cli.Context) error {
 	deps := t.Project.Dependencies()
+	fmt.Fprintf(t.Out, "Dependencies %s (%d)\n", t.Project.Name(), len(deps))
 	for _, dep := range deps {
 		fmt.Fprintf(t.Out, "%s %s\n", dep.Name, dep.Version)
 	}
-	fmt.Fprintf(t.Out, "dependencies(%d)\n", len(deps))
 	return nil
 }
 
 func (t *Tool) DoClean(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Cleaning...")
+	fmt.Fprintf(t.Out, "Cleaning %s ...\n", t.Project.Name())
 	return t.Project.Clean()
 }
 
 func (t *Tool) DoInstall(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Installing...")
+	fmt.Fprintf(t.Out, "Installing %s ...\n", t.Project.Name())
 	dependencies := t.Project.Dependencies()
 	for _, dep := range dependencies {
-		fmt.Fprintf(t.Out, "%s@%s => ", dep.Name, dep.Version)
+		fmt.Fprintf(t.Out, "%s@%s\n", dep.Name, dep.Version)
 		if err := t.Project.Install(dep); err != nil {
-			fmt.Fprintln(t.Err, "fail")
+			fmt.Fprintln(t.Err, "=> fail")
 		} else {
-			fmt.Fprintln(t.Out, "ok")
+			fmt.Fprintln(t.Out, "=> ok")
 		}
 	}
 	return nil
 }
 
 func (t *Tool) DoRun(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Running...")
-	return t.Project.Run()
+	exec := c.String("exec")
+
+	if exec == "" {
+		if err := t.DoBuild(c); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(t.Out, "Running %s ...\n", t.Project.Name())
+		return t.Project.Run(c.Args())
+	} else {
+		fmt.Fprintf(t.Out, "Running %s ...\n", t.Project.Name())
+		execArr := strings.Split(exec, " ")
+		runner := &Runner{
+			Name: execArr[0],
+			Args: execArr[1:],
+		}
+		cmd, _ := runner.Run()
+		return cmd.Wait()
+	}
 }
 
 func (t *Tool) DoBuild(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Building...")
+	fmt.Fprintf(t.Out, "Building %s ...\n", t.Project.Name())
 	return t.Project.Build()
 }
 
 func (t *Tool) DoTest(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Testing...")
+	fmt.Fprintf(t.Out, "Testing %s ...\n", t.Project.Name())
 	return t.Project.Test()
-}
-
-func (t *Tool) DoHelp(c *cli.Context) error {
-	fmt.Fprintln(t.Out, "Gopas is a tool to build Go outside GOPATH")
-	fmt.Fprintln(t.Out, "")
-	fmt.Fprintln(t.Out, "Usage:")
-	fmt.Fprintln(t.Out, "")
-	fmt.Fprintln(t.Out, "  gopas <action> [<args...>]")
-	fmt.Fprintln(t.Out, "")
-	fmt.Fprintln(t.Out, "The actions are:")
-	fmt.Fprintln(t.Out, "")
-	fmt.Fprintln(t.Out, "  build    compile packages and dependencies")
-	fmt.Fprintln(t.Out, "  help     show help")
-	fmt.Fprintln(t.Out, "  install  compile and install packages and dependencies")
-	fmt.Fprintln(t.Out, "  list     list dependencies")
-	fmt.Fprintln(t.Out, "  run      compile and run Go program")
-	fmt.Fprintln(t.Out, "  clean    clean local .gopath")
-	fmt.Fprintln(t.Out, "  test     test packages")
-	fmt.Fprintln(t.Out, "")
-	return nil
 }

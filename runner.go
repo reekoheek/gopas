@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -68,10 +69,10 @@ func (r *Runner) runBin() error {
 		r.Err = os.Stderr
 	}
 
+	log.Println("[", r.Name, r.Args, "]")
 	r.command = exec.Command(r.Name, r.Args...)
 	r.command.Env = r.GetEnv()
 	r.command.Dir = r.GetDir()
-	// r.command.Dir = cwd + "/.gopath/src/" + filepath.Base(cwd)
 
 	stdout, err := r.command.StdoutPipe()
 	if err != nil {
