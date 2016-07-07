@@ -199,11 +199,7 @@ func (p *ProjectImpl) Bootstrap() error {
 }
 
 func (p *ProjectImpl) Clean() error {
-	if err := os.RemoveAll(filepath.Join(p.Cwd, ".gopath")); err != nil {
-		return err
-	}
-	if err := os.Remove(filepath.Base(p.Cwd)); err != nil {
-		return err
-	}
+	os.RemoveAll(filepath.Join(p.Cwd, ".gopath"))
+	os.Remove(filepath.Base(p.Cwd))
 	return nil
 }
