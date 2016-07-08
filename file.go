@@ -1,68 +1,72 @@
 package main
 
-// func copy_folder(source string, dest string) (err error) {
+import (
+	"io"
+	"os"
+)
 
-//  sourceinfo, err := os.Stat(source)
-//  if err != nil {
-//    return err
-//  }
+func copy_folder(source string, dest string) error {
+	var (
+		sourceinfo os.FileInfo
+		err        error
+	)
 
-//  err = os.MkdirAll(dest, sourceinfo.Mode())
-//  if err != nil {
-//    return err
-//  }
+	if sourceinfo, err = os.Stat(source); err != nil {
+		return err
+	}
 
-//  directory, _ := os.Open(source)
+	if err = os.MkdirAll(dest, sourceinfo.Mode()); err != nil {
+		return err
+	}
 
-//  objects, err := directory.Readdir(-1)
+	directory, _ := os.Open(source)
 
-//  for _, obj := range objects {
+	objects, err := directory.Readdir(-1)
 
-//    sourcefilepointer := source + "/" + obj.Name()
+	for _, obj := range objects {
 
-//    destinationfilepointer := dest + "/" + obj.Name()
+		sourcefilepointer := source + "/" + obj.Name()
 
-//    if obj.IsDir() {
-//      if obj.Name() != ".gopath" {
-//        err = copy_folder(sourcefilepointer, destinationfilepointer)
-//        if err != nil {
-//          fmt.Println(err)
-//        }
-//      }
-//    } else {
-//      err = copy_file(sourcefilepointer, destinationfilepointer)
-//      if err != nil {
-//        fmt.Println(err)
-//      }
-//    }
+		destinationfilepointer := dest + "/" + obj.Name()
 
-//  }
-//  return
-// }
+		if obj.IsDir() {
+			if obj.Name() != ".gopath" {
+				if err = copy_folder(sourcefilepointer, destinationfilepointer); err != nil {
+					return err
+				}
+			}
+		} else if err = copy_file(sourcefilepointer, destinationfilepointer); err != nil {
+			return err
+		}
+	}
 
-// func copy_file(source string, dest string) (err error) {
-//  sourcefile, err := os.Open(source)
-//  if err != nil {
-//    return err
-//  }
+	return err
+}
 
-//  defer sourcefile.Close()
+func copy_file(source string, dest string) error {
+	var (
+		sourcefile *os.File
+		err        error
+		destfile   *os.File
+	)
 
-//  destfile, err := os.Create(dest)
-//  if err != nil {
-//    return err
-//  }
+	if sourcefile, err = os.Open(source); err != nil {
+		return err
+	}
 
-//  defer destfile.Close()
+	defer sourcefile.Close()
 
-//  _, err = io.Copy(destfile, sourcefile)
-//  if err == nil {
-//    sourceinfo, err := os.Stat(source)
-//    if err != nil {
-//      err = os.Chmod(dest, sourceinfo.Mode())
-//    }
+	if destfile, err = os.Create(dest); err != nil {
+		return err
+	}
 
-//  }
+	defer destfile.Close()
 
-//  return
-// }
+	if _, err = io.Copy(destfile, sourcefile); err == nil {
+		if sourceinfo, err := os.Stat(source); err != nil {
+			err = os.Chmod(dest, sourceinfo.Mode())
+		}
+	}
+
+	return err
+}

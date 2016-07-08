@@ -61,16 +61,16 @@ func Test_Project_Bootstrap(t *testing.T) {
 		return
 	}
 
-	stat, err = os.Stat(TEST_PROJECT_CWD + "/.gopath/src/foo")
-	if err != nil {
-		t.Error(err.Error())
-		return
-	}
+	// stat, err = os.Stat(TEST_PROJECT_CWD + "/.gopath/src/foo")
+	// if err != nil {
+	// 	t.Error(err.Error())
+	// 	return
+	// }
 
-	if !stat.IsDir() {
-		t.Error(".gopath/src/<vendor> is not directory")
-		return
-	}
+	// if !stat.IsDir() {
+	// 	t.Error(".gopath/src/<vendor> is not directory")
+	// 	return
+	// }
 }
 
 func Test_Project_Dependencies(t *testing.T) {

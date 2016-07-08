@@ -39,19 +39,23 @@ func (p *test_tool_ProjectMock) Install(dependency Dependency) error {
 	return nil
 }
 
-func (p *test_tool_ProjectMock) Build() error {
+func (p *test_tool_ProjectMock) Name() string {
+	return "foo"
+}
+
+func (p *test_tool_ProjectMock) BuildAsync() (*Runner, error) {
 	p.isBuilt = true
-	return nil
+	return nil, nil
 }
 
-func (p *test_tool_ProjectMock) Run() error {
+func (p *test_tool_ProjectMock) RunAsync(args []string) (*Runner, error) {
 	p.isRan = true
-	return nil
+	return nil, nil
 }
 
-func (p *test_tool_ProjectMock) Test() error {
+func (p *test_tool_ProjectMock) TestAsync(cover bool) (*Runner, error) {
 	p.isTested = true
-	return nil
+	return nil, nil
 }
 
 func test_tool_New() *Tool {
@@ -71,7 +75,7 @@ func test_tool_New() *Tool {
 
 func test_tool_AssertContains(t *testing.T, str string, s string) bool {
 	if !strings.Contains(str, s) {
-		t.Error("String does not contain " + s)
+		t.Error("String does not contain %s", s)
 		return false
 	}
 	return true
@@ -92,20 +96,6 @@ func Test_Tool_Bootstrap(t *testing.T) {
 	}
 }
 
-func Test_Tool_DoHelp(t *testing.T) {
-	tool := test_tool_New()
-	tool.DoHelp(nil)
-
-	out := tool.Out.(*bytes.Buffer).String()
-
-	test_tool_AssertContains(t, out, "  help")
-	test_tool_AssertContains(t, out, "  build")
-	test_tool_AssertContains(t, out, "  install")
-	test_tool_AssertContains(t, out, "  list")
-	test_tool_AssertContains(t, out, "  run")
-	test_tool_AssertContains(t, out, "  clean")
-}
-
 func Test_Tool_DoList(t *testing.T) {
 	tool := test_tool_New()
 	tool.DoList(nil)
@@ -114,7 +104,7 @@ func Test_Tool_DoList(t *testing.T) {
 
 	test_tool_AssertContains(t, out, "github.com/reekoheek/foo")
 	test_tool_AssertContains(t, out, "github.com/reekoheek/bar")
-	test_tool_AssertContains(t, out, "dependencies(2)")
+	test_tool_AssertContains(t, out, "Dependencies foo (2)")
 }
 
 func Test_Tool_DoClean(t *testing.T) {
@@ -146,8 +136,8 @@ func Test_Tool_DoInstall(t *testing.T) {
 	tool.DoInstall(nil)
 
 	out := tool.Out.(*bytes.Buffer).String()
-	test_tool_AssertContains(t, out, "github.com/reekoheek/foo@ => ok")
-	test_tool_AssertContains(t, out, "github.com/reekoheek/bar@ => ok")
+	test_tool_AssertContains(t, out, "github.com/reekoheek/foo")
+	test_tool_AssertContains(t, out, "github.com/reekoheek/bar")
 }
 
 func Test_Tool_DoRun(t *testing.T) {

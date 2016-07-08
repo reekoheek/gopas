@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/urfave/cli.v2"
@@ -36,8 +37,8 @@ func (t *Tool) Bootstrap() error {
 		t.Err = os.Stderr
 	}
 
-	t.iLogger = log.New(t.Out, "I ", log.Lmicroseconds)
-	t.eLogger = log.New(t.Err, "E ", log.Lmicroseconds)
+	t.iLogger = log.New(t.Out, "--> I ", log.Lmicroseconds)
+	t.eLogger = log.New(t.Err, "--> E ", log.Lmicroseconds)
 
 	if err := t.Project.Bootstrap(); err != nil {
 		return err
@@ -74,15 +75,21 @@ func (t *Tool) DoInstall(c *cli.Context) error {
 }
 
 func (t *Tool) runAsync(c *cli.Context) (*Runner, error) {
-	exec := c.String("exec")
+	var args []string
+	if c != nil {
+		args = c.Args().Slice()
+	} else {
+		args = []string{}
+	}
 
+	exec := c.String("exec")
 	if exec == "" {
 		if err := t.DoBuild(c); err != nil {
 			return nil, err
 		}
 
 		t.LogI("Running %s ...\n", t.Project.Name())
-		return t.Project.RunAsync(c.Args().Slice())
+		return t.Project.RunAsync(args)
 	} else {
 		t.LogI("Running %s ...\n", t.Project.Name())
 		execArr := strings.Split(exec, " ")
@@ -99,7 +106,11 @@ func (t *Tool) DoRun(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return runner.Wait()
+	if runner != nil {
+		return runner.Wait()
+	} else {
+		return nil
+	}
 }
 
 func (t *Tool) buildAsync(c *cli.Context) (*Runner, error) {
@@ -112,12 +123,23 @@ func (t *Tool) DoBuild(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return runner.Wait()
+	if runner != nil {
+		return runner.Wait()
+	} else {
+		return nil
+	}
 }
 
 func (t *Tool) testAsync(c *cli.Context) (*Runner, error) {
 	t.LogI("Testing %s ...\n", t.Project.Name())
-	return t.Project.TestAsync()
+	cover := c.Bool("cover")
+	if cover {
+		cwd, _ := os.Getwd()
+		t.LogI(
+			"Coverage html: %s",
+			filepath.Join(cwd, ".gopath", "src", t.Project.Name(), "cover.html"))
+	}
+	return t.Project.TestAsync(cover)
 }
 
 func (t *Tool) DoTest(c *cli.Context) error {
@@ -125,7 +147,11 @@ func (t *Tool) DoTest(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return runner.Wait()
+	if runner != nil {
+		return runner.Wait()
+	} else {
+		return nil
+	}
 }
 
 func (t *Tool) DoWatchRun(c *cli.Context) error {

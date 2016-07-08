@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,23 +21,34 @@ type Watcher struct {
 func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 	w.cb = cb
 
-	for {
-		for _, dir := range w.Watches {
-			filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-				if w.isIgnorable(path) {
-					return filepath.SkipDir
-				}
+	go func() {
+		for {
+			for _, dir := range w.Watches {
+				filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+					if w.isIgnorable(path) {
+						return filepath.SkipDir
+					}
 
-				if w.isAcceptable(path) && info.ModTime().After(w.modifiedTime) {
-					w.modifiedTime = time.Now()
-					w.Start()
-				}
-				return nil
-			})
+					if w.isAcceptable(path) && info.ModTime().After(w.modifiedTime) {
+						w.modifiedTime = time.Now()
+						w.Start()
+					}
+					return nil
+				})
+			}
+
+			time.Sleep(1 * time.Second)
 		}
+	}()
 
-		time.Sleep(1 * time.Second)
+	for {
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
+		if strings.Trim(text, " \t\r\n") == "rs" {
+			w.Start()
+		}
 	}
+
 	return nil
 }
 

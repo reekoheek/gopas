@@ -66,12 +66,9 @@ func (r *Runner) Run() error {
 		go io.Copy(r.Out, stdout)
 		go io.Copy(r.Err, stderr)
 		go r.Command.Wait()
-
-		return nil
-	} else {
-		return nil
 	}
 
+	return nil
 }
 
 func (r *Runner) Wait() error {

@@ -9,7 +9,7 @@ import (
 
 func Test_Runner_RunWithoutName(t *testing.T) {
 	runner := &Runner{}
-	if _, err := runner.Run(); err == nil || err.Error() != "Name is undefined" {
+	if err := runner.Run(); err == nil || err.Error() != "Name is undefined" {
 		t.Errorf("Must fail if Name is undefined")
 	}
 }
@@ -21,13 +21,13 @@ func Test_Runner_Run(t *testing.T) {
 		Name: "pwd",
 		Out:  bytes.NewBuffer([]byte{}),
 	}
-	cmd, err := runner.Run()
+	err = runner.Run()
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	cmd.Wait()
+	runner.Wait()
 
 	if strings.Trim(runner.Out.(*bytes.Buffer).String(), " \n\r") != cwd {
 		t.Error("Wrong output or command error")
@@ -42,13 +42,13 @@ func Test_Runner_RunWithEnv(t *testing.T) {
 		Out:  bytes.NewBuffer([]byte{}),
 	}
 
-	cmd, err := runner.Run()
+	err := runner.Run()
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	cmd.Wait()
+	runner.Wait()
 
 	if !strings.Contains(runner.Out.(*bytes.Buffer).String(), "GOPATH=/") {
 		t.Error("System environment variables are not populated")
@@ -65,13 +65,13 @@ func Test_Runner_RunWithEnv(t *testing.T) {
 		Out:  bytes.NewBuffer([]byte{}),
 	}
 
-	cmd, err = runner.Run()
+	err = runner.Run()
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	cmd.Wait()
+	runner.Wait()
 	if cwd, _ := os.Getwd(); strings.Trim(runner.Out.(*bytes.Buffer).String(), "\n\r ") != cwd {
 		t.Error("Dir does not use cwd")
 		return
@@ -85,13 +85,13 @@ func Test_Runner_RunOverrideEnv(t *testing.T) {
 		Out:  bytes.NewBuffer([]byte{}),
 	}
 
-	cmd, err := runner.Run()
+	err := runner.Run()
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	cmd.Wait()
+	runner.Wait()
 
 	if !strings.Contains(runner.Out.(*bytes.Buffer).String(), "GOPATH=/foo/bar") {
 		t.Error("Variable is not overridden")
@@ -111,13 +111,13 @@ func Test_Runner_RunOverrideDir(t *testing.T) {
 		return
 	}
 
-	cmd, err := runner.Run()
+	err := runner.Run()
 	if err != nil {
 		t.Error(err.Error())
 		return
 	}
 
-	cmd.Wait()
+	runner.Wait()
 
 	if strings.Trim(runner.Out.(*bytes.Buffer).String(), "\n\r ") != "/" {
 		t.Error("Dir does not use specified dir")

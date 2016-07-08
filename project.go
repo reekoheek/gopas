@@ -26,7 +26,7 @@ type Project interface {
 	Clean() error
 	Install(dependency Dependency) error
 	RunAsync(args []string) (*Runner, error)
-	TestAsync() (*Runner, error)
+	TestAsync(cover bool) (*Runner, error)
 	BuildAsync() (*Runner, error)
 
 	Name() string
@@ -114,18 +114,47 @@ func (p *ProjectImpl) RunAsync(args []string) (*Runner, error) {
 	return runner, err
 }
 
-func (p *ProjectImpl) TestAsync() (*Runner, error) {
+func (p *ProjectImpl) TestAsync(cover bool) (*Runner, error) {
+	var args []string
+	if cover {
+		args = []string{"test", "-coverprofile", "cover.out"}
+	} else {
+		args = []string{"test"}
+	}
+
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
+	projectEnv := []string{
+		"GOPATH=" + gopathDir,
+	}
+
 	runner := &Runner{
 		Name: p.exeGo,
-		Args: []string{"test"},
+		Args: args,
 		Dir:  projectDir,
-		Env: []string{
-			"GOPATH=" + gopathDir,
-		},
+		Env:  projectEnv,
 	}
 	err := runner.Run()
+
+	if cover {
+		if err != nil {
+			return runner, err
+		}
+
+		err := runner.Wait()
+		if err != nil {
+			return runner, err
+		}
+
+		runner = &Runner{
+			Name: p.exeGo,
+			Args: []string{"tool", "cover", "-html=cover.out", "-o=cover.html"},
+			Dir:  projectDir,
+			Env:  projectEnv,
+		}
+
+		err = runner.Run()
+	}
 	return runner, err
 }
 
@@ -148,7 +177,7 @@ func (p *ProjectImpl) Bootstrap() error {
 	}
 	p.Cwd = newCwd
 
-	vendorDir := filepath.Join(p.Cwd, "vendor")
+	//vendorDir := filepath.Join(p.Cwd, "vendor")
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	gopathSrcDir := filepath.Join(gopathDir, "src")
 	gopathProjectDir := filepath.Join(gopathSrcDir, filepath.Base(p.Cwd))
@@ -159,25 +188,25 @@ func (p *ProjectImpl) Bootstrap() error {
 		}
 	}
 
-	// if err := os.RemoveAll(p.Cwd + "/.gopath/src/" + filepath.Base(p.Cwd)); err != nil {
-	//  fmt.Fprintf(os.Stderr, ">> Bootstrap Error: %s\n", err.Error())
-	// }
-	// copy_folder(p.Cwd, p.Cwd+"/.gopath/src/"+filepath.Base(p.Cwd))
-
-	os.Remove(gopathProjectDir)
-	if err := os.Symlink(p.Cwd, gopathProjectDir); err != nil {
+	if err := os.RemoveAll(gopathProjectDir); err != nil {
 		panic(err.Error())
 	}
-	// FIXME workaround, cannot read module on vendor dir
-	if files, err := ioutil.ReadDir(vendorDir); err == nil {
-		for _, file := range files {
-			name := file.Name()
-			dest := filepath.Join(gopathSrcDir, name)
+	copy_folder(p.Cwd, gopathProjectDir)
 
-			os.Remove(dest)
-			os.Symlink(filepath.Join(vendorDir, name), dest)
-		}
-	}
+	//os.Remove(gopathProjectDir)
+	//if err := os.Symlink(p.Cwd, gopathProjectDir); err != nil {
+	//	panic(err.Error())
+	//}
+	//// FIXME workaround, cannot read module on vendor dir
+	//if files, err := ioutil.ReadDir(vendorDir); err == nil {
+	//	for _, file := range files {
+	//		name := file.Name()
+	//		dest := filepath.Join(gopathSrcDir, name)
+
+	//		os.Remove(dest)
+	//		os.Symlink(filepath.Join(vendorDir, name), dest)
+	//	}
+	//}
 
 	return nil
 }

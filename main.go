@@ -68,6 +68,12 @@ func main() {
 				Name:   "test",
 				Usage:  "test project",
 				Action: tool.DoTest,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "cover",
+						Aliases: []string{"c"},
+					},
+				},
 			},
 			{
 				Name:  "watch",
