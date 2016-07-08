@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/urfave/cli.v1"
+	"gopkg.in/urfave/cli.v2"
 )
 
 /**
@@ -23,54 +23,87 @@ func main() {
 	tool := &Tool{
 		Project: &ProjectImpl{
 			Cwd: cwd,
-			//Watches:    []string{"."},
-			//Ignores:    []string{".git", ".gopath"},
-			//Extensions: []string{"go"},
 		},
 	}
 
 	tool.Bootstrap()
 
-	app := cli.NewApp()
-	app.Name = "gopas"
-	app.Usage = "Go build tool outside GOPATH"
-	app.Version = "0.1.0"
-
-	app.Commands = []cli.Command{
-		{
-			Name:   "build",
-			Usage:  "build project",
-			Action: tool.DoBuild,
-		},
-		{
-			Name:   "clean",
-			Usage:  "clean gopath",
-			Action: tool.DoClean,
-		},
-		{
-			Name:   "install",
-			Usage:  "install dependencies",
-			Action: tool.DoInstall,
-		},
-		{
-			Name:   "list",
-			Usage:  "list dependencies",
-			Action: tool.DoList,
-		},
-		{
-			Name:  "run",
-			Usage: "run executable",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name: "exec, x",
+	app := &cli.App{
+		Name:    "gopas",
+		Usage:   "Go build tool outside GOPATH",
+		Version: "0.1.0",
+		Commands: []*cli.Command{
+			{
+				Name:   "build",
+				Usage:  "build project",
+				Action: tool.DoBuild,
+			},
+			{
+				Name:   "clean",
+				Usage:  "clean gopath",
+				Action: tool.DoClean,
+			},
+			{
+				Name:   "install",
+				Usage:  "install dependencies",
+				Action: tool.DoInstall,
+			},
+			{
+				Name:   "list",
+				Usage:  "list dependencies",
+				Action: tool.DoList,
+			},
+			{
+				Name:  "run",
+				Usage: "run executable",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "exec",
+						Aliases: []string{"x"},
+					},
+				},
+				Action: tool.DoRun,
+			},
+			{
+				Name:   "test",
+				Usage:  "test project",
+				Action: tool.DoTest,
+			},
+			{
+				Name:  "watch",
+				Usage: "watch action",
+				Flags: []cli.Flag{
+					&cli.StringSliceFlag{
+						Name:    "watch",
+						Aliases: []string{"w"},
+						Value:   cli.NewStringSlice("."),
+					},
+					&cli.StringFlag{
+						Name:    "ext",
+						Aliases: []string{"e"},
+						Value:   "go",
+					},
+					&cli.StringSliceFlag{
+						Name:    "ignore",
+						Aliases: []string{"i"},
+						Value:   cli.NewStringSlice(".git", ".gopath"),
+					},
+				},
+				Subcommands: []*cli.Command{
+					{
+						Name:   "run",
+						Action: tool.DoWatchRun,
+					},
+					{
+						Name:   "build",
+						Action: tool.DoWatchBuild,
+					},
+					{
+						Name:   "test",
+						Action: tool.DoWatchTest,
+					},
 				},
 			},
-			Action: tool.DoRun,
-		},
-		{
-			Name:   "test",
-			Usage:  "test project",
-			Action: tool.DoTest,
 		},
 	}
 

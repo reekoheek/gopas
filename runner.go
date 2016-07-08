@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -22,7 +21,7 @@ type Runner struct {
 	Dir     string
 	Out     io.Writer
 	Err     io.Writer
-	command *exec.Cmd
+	Command *exec.Cmd
 }
 
 /**
@@ -31,15 +30,56 @@ type Runner struct {
  * @return {*exec.Cmd}
  * @return {error}
  */
-func (r *Runner) Run() (*exec.Cmd, error) {
-	if r.command == nil || r.IsExited() {
-		err := r.runBin()
-		// time.Sleep(250 * time.Millisecond)
-		return r.command, err
+func (r *Runner) Run() error {
+	if r.Command == nil || r.IsExited() {
+		if r.Name == "" {
+			return errors.New("Name is undefined")
+		}
+
+		if r.Out == nil {
+			r.Out = os.Stdout
+		}
+
+		if r.Err == nil {
+			r.Err = os.Stderr
+		}
+
+		//log.Println("[", r.Name, r.Args, "]")
+		r.Command = exec.Command(r.Name, r.Args...)
+		r.Command.Env = r.GetEnv()
+		r.Command.Dir = r.GetDir()
+
+		stdout, err := r.Command.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		stderr, err := r.Command.StderrPipe()
+		if err != nil {
+			return err
+		}
+
+		err = r.Command.Start()
+		if err != nil {
+			return err
+		}
+
+		go io.Copy(r.Out, stdout)
+		go io.Copy(r.Err, stderr)
+		go r.Command.Wait()
+
+		return nil
 	} else {
-		return r.command, nil
+		return nil
 	}
 
+}
+
+func (r *Runner) Wait() error {
+	if r.IsExited() {
+		return nil
+	}
+
+	return r.Command.Wait()
 }
 
 /**
@@ -48,51 +88,7 @@ func (r *Runner) Run() (*exec.Cmd, error) {
  * @return {bool}
  */
 func (r *Runner) IsExited() bool {
-	return r.command != nil && r.command.ProcessState != nil && r.command.ProcessState.Exited()
-}
-
-/**
- * Run bin
- *
- * @return {error}
- */
-func (r *Runner) runBin() error {
-	if r.Name == "" {
-		return errors.New("Name is undefined")
-	}
-
-	if r.Out == nil {
-		r.Out = os.Stdout
-	}
-
-	if r.Err == nil {
-		r.Err = os.Stderr
-	}
-
-	log.Println("[", r.Name, r.Args, "]")
-	r.command = exec.Command(r.Name, r.Args...)
-	r.command.Env = r.GetEnv()
-	r.command.Dir = r.GetDir()
-
-	stdout, err := r.command.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := r.command.StderrPipe()
-	if err != nil {
-		return err
-	}
-
-	err = r.command.Start()
-	if err != nil {
-		return err
-	}
-
-	go io.Copy(r.Out, stdout)
-	go io.Copy(r.Err, stderr)
-	go r.command.Wait()
-
-	return nil
+	return r.Command != nil && r.Command.ProcessState != nil && r.Command.ProcessState.Exited()
 }
 
 func (r *Runner) GetEnv() []string {
@@ -106,14 +102,14 @@ func (r *Runner) GetEnv() []string {
 	env = append(env, r.Env...)
 
 	for _, v := range os.Environ() {
-		found := false
+		use := true
 		for _, prefix := range prefixes {
-			if !strings.HasPrefix(v, prefix) {
-				found = true
+			if strings.HasPrefix(v, prefix) {
+				use = false
 				break
 			}
 		}
-		if found {
+		if use {
 			env = append(env, v)
 		}
 	}
@@ -135,32 +131,32 @@ func (r *Runner) GetDir() string {
  * @return {error}
  */
 func (r *Runner) Kill() error {
-	if r.command != nil && r.command.Process != nil {
+	if r.Command != nil && r.Command.Process != nil {
 		done := make(chan error)
 		go func() {
-			r.command.Wait()
+			r.Command.Wait()
 			close(done)
 		}()
 
 		//Trying a "soft" kill first
 		if runtime.GOOS == "windows" {
-			if err := r.command.Process.Kill(); err != nil {
+			if err := r.Command.Process.Kill(); err != nil {
 				return err
 			}
-		} else if err := r.command.Process.Signal(os.Interrupt); err != nil {
+		} else if err := r.Command.Process.Signal(os.Interrupt); err != nil {
 			return err
 		}
 
 		//Wait for our process to die before we return or hard kill after 3 sec
 		select {
 		case <-time.After(3 * time.Second):
-			if err := r.command.Process.Kill(); err != nil {
+			if err := r.Command.Process.Kill(); err != nil {
 				fmt.Fprintln(os.Stderr, ">> Kill Error: ", err)
 				os.Exit(1)
 			}
 		case <-done:
 		}
-		r.command = nil
+		r.Command = nil
 	}
 
 	return nil

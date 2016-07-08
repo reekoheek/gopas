@@ -25,9 +25,9 @@ type Project interface {
 	Dependencies() []Dependency
 	Clean() error
 	Install(dependency Dependency) error
-	Run(args []string) error
-	Test() error
-	Build() error
+	RunAsync(args []string) (*Runner, error)
+	TestAsync() (*Runner, error)
+	BuildAsync() (*Runner, error)
 
 	Name() string
 }
@@ -81,14 +81,14 @@ func (p *ProjectImpl) Install(dependency Dependency) error {
 			"GOPATH=" + gopathDir,
 		},
 	}
-	command, err := runner.Run()
+	err := runner.Run()
 	if err != nil {
 		return err
 	}
-	return command.Wait()
+	return runner.Wait()
 }
 
-func (p *ProjectImpl) Build() error {
+func (p *ProjectImpl) BuildAsync() (*Runner, error) {
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
 	runner := &Runner{
@@ -99,35 +99,22 @@ func (p *ProjectImpl) Build() error {
 			"GOPATH=" + gopathDir,
 		},
 	}
-	command, err := runner.Run()
-	if err != nil {
-		return err
-	}
-	return command.Wait()
+	err := runner.Run()
+	return runner, err
 }
 
-func (p *ProjectImpl) Run(args []string) error {
-	//p.Build()
-
-	//gopathDir := filepath.Join(p.Cwd, ".gopath")
-	//projectBase := filepath.Base(p.Cwd)
-	//projectDir := filepath.Join(gopathDir, "src", projectBase)
-	//projectExe := filepath.Join(projectDir, projectBase)
-
+func (p *ProjectImpl) RunAsync(args []string) (*Runner, error) {
 	projectExe := filepath.Join(p.Cwd, filepath.Base(p.Cwd))
 	runner := &Runner{
 		Name: projectExe,
 		Args: args,
 	}
 
-	command, err := runner.Run()
-	if err != nil {
-		return err
-	}
-	return command.Wait()
+	err := runner.Run()
+	return runner, err
 }
 
-func (p *ProjectImpl) Test() error {
+func (p *ProjectImpl) TestAsync() (*Runner, error) {
 	gopathDir := filepath.Join(p.Cwd, ".gopath")
 	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
 	runner := &Runner{
@@ -138,11 +125,8 @@ func (p *ProjectImpl) Test() error {
 			"GOPATH=" + gopathDir,
 		},
 	}
-	command, err := runner.Run()
-	if err != nil {
-		return err
-	}
-	return command.Wait()
+	err := runner.Run()
+	return runner, err
 }
 
 /**

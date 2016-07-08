@@ -4,16 +4,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strings"
 
-	"gopkg.in/urfave/cli.v1"
+	"gopkg.in/urfave/cli.v2"
 )
 
 type Tool struct {
 	Project Project
 	Out     io.Writer
 	Err     io.Writer
+	iLogger *log.Logger
+	eLogger *log.Logger
+}
+
+func (t *Tool) LogI(format string, args ...interface{}) {
+	t.iLogger.Printf(format, args...)
 }
 
 func (t *Tool) Bootstrap() error {
@@ -29,6 +36,9 @@ func (t *Tool) Bootstrap() error {
 		t.Err = os.Stderr
 	}
 
+	t.iLogger = log.New(t.Out, "I ", log.Lmicroseconds)
+	t.eLogger = log.New(t.Err, "E ", log.Lmicroseconds)
+
 	if err := t.Project.Bootstrap(); err != nil {
 		return err
 	}
@@ -37,23 +47,23 @@ func (t *Tool) Bootstrap() error {
 
 func (t *Tool) DoList(c *cli.Context) error {
 	deps := t.Project.Dependencies()
-	fmt.Fprintf(t.Out, "Dependencies %s (%d)\n", t.Project.Name(), len(deps))
+	t.LogI("Dependencies %s (%d)", t.Project.Name(), len(deps))
 	for _, dep := range deps {
-		fmt.Fprintf(t.Out, "%s %s\n", dep.Name, dep.Version)
+		t.LogI("%s %s\n", dep.Name, dep.Version)
 	}
 	return nil
 }
 
 func (t *Tool) DoClean(c *cli.Context) error {
-	fmt.Fprintf(t.Out, "Cleaning %s ...\n", t.Project.Name())
+	t.LogI("Cleaning %s ...\n", t.Project.Name())
 	return t.Project.Clean()
 }
 
 func (t *Tool) DoInstall(c *cli.Context) error {
-	fmt.Fprintf(t.Out, "Installing %s ...\n", t.Project.Name())
+	t.LogI("Installing %s ...\n", t.Project.Name())
 	dependencies := t.Project.Dependencies()
 	for _, dep := range dependencies {
-		fmt.Fprintf(t.Out, "%s@%s\n", dep.Name, dep.Version)
+		t.LogI("%s@%s\n", dep.Name, dep.Version)
 		if err := t.Project.Install(dep); err != nil {
 			fmt.Fprintln(t.Err, "=> fail")
 		} else {
@@ -63,34 +73,99 @@ func (t *Tool) DoInstall(c *cli.Context) error {
 	return nil
 }
 
-func (t *Tool) DoRun(c *cli.Context) error {
+func (t *Tool) runAsync(c *cli.Context) (*Runner, error) {
 	exec := c.String("exec")
 
 	if exec == "" {
 		if err := t.DoBuild(c); err != nil {
-			return err
+			return nil, err
 		}
 
-		fmt.Fprintf(t.Out, "Running %s ...\n", t.Project.Name())
-		return t.Project.Run(c.Args())
+		t.LogI("Running %s ...\n", t.Project.Name())
+		return t.Project.RunAsync(c.Args().Slice())
 	} else {
-		fmt.Fprintf(t.Out, "Running %s ...\n", t.Project.Name())
+		t.LogI("Running %s ...\n", t.Project.Name())
 		execArr := strings.Split(exec, " ")
 		runner := &Runner{
 			Name: execArr[0],
 			Args: execArr[1:],
 		}
-		cmd, _ := runner.Run()
-		return cmd.Wait()
+		return runner, runner.Run()
 	}
 }
 
+func (t *Tool) DoRun(c *cli.Context) error {
+	runner, err := t.runAsync(c)
+	if err != nil {
+		return err
+	}
+	return runner.Wait()
+}
+
+func (t *Tool) buildAsync(c *cli.Context) (*Runner, error) {
+	t.LogI("Building %s ...\n", t.Project.Name())
+	return t.Project.BuildAsync()
+}
+
 func (t *Tool) DoBuild(c *cli.Context) error {
-	fmt.Fprintf(t.Out, "Building %s ...\n", t.Project.Name())
-	return t.Project.Build()
+	runner, err := t.buildAsync(c)
+	if err != nil {
+		return err
+	}
+	return runner.Wait()
+}
+
+func (t *Tool) testAsync(c *cli.Context) (*Runner, error) {
+	t.LogI("Testing %s ...\n", t.Project.Name())
+	return t.Project.TestAsync()
 }
 
 func (t *Tool) DoTest(c *cli.Context) error {
-	fmt.Fprintf(t.Out, "Testing %s ...\n", t.Project.Name())
-	return t.Project.Test()
+	runner, err := t.testAsync(c)
+	if err != nil {
+		return err
+	}
+	return runner.Wait()
+}
+
+func (t *Tool) DoWatchRun(c *cli.Context) error {
+	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
+	watcher := &Watcher{
+		Watches:    c.StringSlice("watch"),
+		Extensions: strings.Split(c.String("ext"), ","),
+		Ignores:    c.StringSlice("ignore"),
+		LogI:       t.LogI,
+	}
+
+	return watcher.Watch(func() (*Runner, error) {
+		return t.runAsync(c)
+	})
+}
+
+func (t *Tool) DoWatchBuild(c *cli.Context) error {
+	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
+	watcher := &Watcher{
+		Watches:    c.StringSlice("watch"),
+		Extensions: strings.Split(c.String("ext"), ","),
+		Ignores:    c.StringSlice("ignore"),
+		LogI:       t.LogI,
+	}
+
+	return watcher.Watch(func() (*Runner, error) {
+		return t.buildAsync(c)
+	})
+}
+
+func (t *Tool) DoWatchTest(c *cli.Context) error {
+	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
+	watcher := &Watcher{
+		Watches:    c.StringSlice("watch"),
+		Extensions: strings.Split(c.String("ext"), ","),
+		Ignores:    c.StringSlice("ignore"),
+		LogI:       t.LogI,
+	}
+
+	return watcher.Watch(func() (*Runner, error) {
+		return t.testAsync(c)
+	})
 }
