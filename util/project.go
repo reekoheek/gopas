@@ -139,7 +139,7 @@ func (p *ProjectImpl) GoRun(args ...string) error {
 }
 
 func (p *ProjectImpl) Run(args ...string) error {
-	executable := filepath.Join(p.Dir(), p.Name())
+	executable := filepath.Join(p.Dir(), filepath.Base(p.Name()))
 
 	runner := &Runner{
 		Name: executable,
