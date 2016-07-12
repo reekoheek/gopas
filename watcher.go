@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,10 +10,10 @@ import (
 )
 
 type Watcher struct {
+	*Logger
 	Watches      []string
 	Extensions   []string
 	Ignores      []string
-	LogI         func(s string, args ...interface{})
 	cb           func() (*Runner, error)
 	runner       *Runner
 	modifiedTime time.Time
@@ -20,6 +21,8 @@ type Watcher struct {
 
 func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 	w.cb = cb
+
+	quit := make(chan error, 1)
 
 	go func() {
 		for {
@@ -31,7 +34,10 @@ func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 
 					if w.isAcceptable(path) && info.ModTime().After(w.modifiedTime) {
 						w.modifiedTime = time.Now()
-						w.Start()
+						if err := w.Start(); err != nil {
+							quit <- err
+							return errors.New("End of walk")
+						}
 					}
 					return nil
 				})
@@ -41,23 +47,37 @@ func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 		}
 	}()
 
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		if strings.Trim(text, " \t\r\n") == "rs" {
-			w.Start()
-		}
-	}
+	go func() {
+		for {
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			token := strings.Trim(text, " \t\r\n")
 
-	return nil
+			switch token {
+			case "rs":
+				if err := w.Start(); err != nil {
+					quit <- err
+					break
+				}
+			case "q":
+				quit <- nil
+				break
+			}
+		}
+	}()
+
+	return <-quit
 }
 
 func (w *Watcher) Start() error {
 	if w.runner != nil && !w.runner.IsExited() {
-		w.LogI("Killing last watched process ...")
-		w.runner.Kill()
+		w.LogI("[WATCHER] Killing last process ...")
+		if err := w.runner.Kill(); err != nil {
+			return err
+		}
+		//time.Sleep(200 * time.Millisecond)
 	}
-	w.LogI("Starting watched process ...")
+	w.LogI("[WATCHER] Starting process ...")
 
 	runner, err := w.cb()
 	if err != nil {

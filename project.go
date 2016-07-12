@@ -2,11 +2,16 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -21,24 +26,39 @@ type Dependency struct {
 }
 
 type Project interface {
-	Bootstrap() error
 	Dependencies() []Dependency
 	Clean() error
 	Install(dependency Dependency) error
-	RunAsync(args []string) (*Runner, error)
-	TestAsync(cover bool) (*Runner, error)
-	BuildAsync() (*Runner, error)
+	Run(args ...string) error
+	Test(cover bool) error
+	PreBuild() error
+	Build() error
 
 	Name() string
+	Dir() string
 }
 
 type ProjectImpl struct {
-	Cwd string
-	//Watches      []string
-	//Ignores      []string
-	//Extensions   []string
+	*Logger
+	Cwd          string
+	preBuild     [][]string
 	dependencies []Dependency
 	exeGo        string
+}
+
+func (p *ProjectImpl) Gopath() string {
+	return filepath.Join(p.Cwd, ".gopath")
+}
+
+func (p *ProjectImpl) Env() []string {
+	return []string{
+		"GOPATH=" + p.Gopath(),
+		"GOBIN=" + filepath.Join(p.Gopath(), "bin"),
+	}
+}
+
+func (p *ProjectImpl) Dir() string {
+	return filepath.Join(p.Gopath(), "src", p.Name())
 }
 
 func (p *ProjectImpl) Name() string {
@@ -70,105 +90,97 @@ func (p *ProjectImpl) Dependencies() []Dependency {
 }
 
 func (p *ProjectImpl) Install(dependency Dependency) error {
-	gopathDir := filepath.Join(p.Cwd, ".gopath")
-	srcDir := filepath.Join(gopathDir, "src")
+	return p.GoRun("get", dependency.Name)
+}
 
+func (p *ProjectImpl) PreBuild() error {
+	for _, cmdArr := range p.preBuild {
+		p.LogI("  %s", cmdArr)
+
+		runner := &Runner{
+			Name: cmdArr[0],
+			Args: cmdArr[1:],
+			Dir:  p.Dir(),
+		}
+
+		if err := runner.Run(); err != nil {
+			return err
+		}
+
+		if err := runner.Wait(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *ProjectImpl) Build() error {
+	return p.GoRun("build")
+}
+
+func (p *ProjectImpl) GoRun(args ...string) error {
 	runner := &Runner{
 		Name: p.exeGo,
-		Args: []string{"get", dependency.Name},
-		Dir:  srcDir,
-		Env: []string{
-			"GOPATH=" + gopathDir,
-		},
+		Args: args,
+		Dir:  p.Dir(),
+		Env:  p.Env(),
 	}
-	err := runner.Run()
-	if err != nil {
+
+	if err := runner.Run(); err != nil {
 		return err
 	}
+
 	return runner.Wait()
 }
 
-func (p *ProjectImpl) BuildAsync() (*Runner, error) {
-	gopathDir := filepath.Join(p.Cwd, ".gopath")
-	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
-	runner := &Runner{
-		Name: p.exeGo,
-		Args: []string{"build"},
-		Dir:  projectDir,
-		Env: []string{
-			"GOPATH=" + gopathDir,
-		},
-	}
-	err := runner.Run()
-	return runner, err
-}
+func (p *ProjectImpl) Run(args ...string) error {
+	executable := filepath.Join(p.Dir(), p.Name())
 
-func (p *ProjectImpl) RunAsync(args []string) (*Runner, error) {
-	projectExe := filepath.Join(p.Cwd, filepath.Base(p.Cwd))
 	runner := &Runner{
-		Name: projectExe,
+		Name: executable,
 		Args: args,
 	}
 
-	err := runner.Run()
-	return runner, err
+	cSignal := make(chan os.Signal, 1)
+	signal.Notify(cSignal, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-cSignal
+		//log.Println("[SIGNAL] caught ", sig, os.Args)
+		if err := runner.Kill(); err != nil {
+			fmt.Fprintf(os.Stderr, "[SIGNAL] Error: %s\n", err.Error())
+		}
+		// no need to exit, because process will immediately exit when child process exit
+		//os.Exit(0)
+	}()
+
+	if err := runner.Run(); err != nil {
+		return err
+	}
+
+	return runner.Wait()
 }
 
-func (p *ProjectImpl) TestAsync(cover bool) (*Runner, error) {
-	var args []string
+func (p *ProjectImpl) Test(cover bool) error {
 	if cover {
-		args = []string{"test", "-coverprofile", "cover.out"}
+		if err := p.GoRun("test", "-coverprofile", "cover.out"); err != nil {
+			return err
+		}
+		return p.GoRun("tool", "cover", "-html", "cover.out", "-o", "cover.html")
 	} else {
-		args = []string{"test"}
+		return p.GoRun("test")
 	}
-
-	gopathDir := filepath.Join(p.Cwd, ".gopath")
-	projectDir := filepath.Join(gopathDir, "src", filepath.Base(p.Cwd))
-	projectEnv := []string{
-		"GOPATH=" + gopathDir,
-	}
-
-	runner := &Runner{
-		Name: p.exeGo,
-		Args: args,
-		Dir:  projectDir,
-		Env:  projectEnv,
-	}
-	err := runner.Run()
-
-	if cover {
-		if err != nil {
-			return runner, err
-		}
-
-		err := runner.Wait()
-		if err != nil {
-			return runner, err
-		}
-
-		runner = &Runner{
-			Name: p.exeGo,
-			Args: []string{"tool", "cover", "-html=cover.out", "-o=cover.html"},
-			Dir:  projectDir,
-			Env:  projectEnv,
-		}
-
-		err = runner.Run()
-	}
-	return runner, err
 }
 
 /**
- * Bootstrap project options and gopath dir
+ * Construct project options and gopath dir
  */
-func (p *ProjectImpl) Bootstrap() error {
+func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 	var err error
-	if p.exeGo, err = exec.LookPath("go"); err != nil {
-		return errors.New("Please install go")
-	}
+
+	p.Logger = logger
 
 	if "" == p.Cwd {
-		return errors.New("Cwd is undefined")
+		return p, errors.New("Cwd is undefined")
 	}
 
 	newCwd, err := filepath.Abs(p.Cwd)
@@ -177,21 +189,24 @@ func (p *ProjectImpl) Bootstrap() error {
 	}
 	p.Cwd = newCwd
 
-	//vendorDir := filepath.Join(p.Cwd, "vendor")
-	gopathDir := filepath.Join(p.Cwd, ".gopath")
-	gopathSrcDir := filepath.Join(gopathDir, "src")
-	gopathProjectDir := filepath.Join(gopathSrcDir, filepath.Base(p.Cwd))
+	if p.exeGo, err = exec.LookPath("go"); err != nil {
+		return p, errors.New("Please install go")
+	}
 
-	if _, err := os.Stat(gopathDir); os.IsNotExist(err) {
-		if os.MkdirAll(gopathSrcDir, 0755) != nil {
-			panic(err.Error())
+	srcDir := filepath.Join(p.Gopath(), "src")
+	if _, err = os.Stat(srcDir); os.IsNotExist(err) {
+		if os.MkdirAll(srcDir, 0755) != nil {
+			return p, err
 		}
 	}
 
-	if err := os.RemoveAll(gopathProjectDir); err != nil {
-		panic(err.Error())
+	if err = os.RemoveAll(p.Dir()); err != nil {
+		return p, err
 	}
-	copy_folder(p.Cwd, gopathProjectDir)
+
+	if err = copy_folder(p.Cwd, p.Dir()); err != nil {
+		return p, err
+	}
 
 	//os.Remove(gopathProjectDir)
 	//if err := os.Symlink(p.Cwd, gopathProjectDir); err != nil {
@@ -208,11 +223,32 @@ func (p *ProjectImpl) Bootstrap() error {
 	//	}
 	//}
 
-	return nil
+	if content, err := ioutil.ReadFile(filepath.Join(p.Cwd, "gopas.yml")); err == nil {
+		config := struct {
+			PreBuild     [][]string `yaml:"pre-build"`
+			Dependencies []string
+		}{}
+		if err = yaml.Unmarshal(content, &config); err == nil {
+			p.preBuild = config.PreBuild
+			for _, dep := range config.Dependencies {
+				depSplitted := strings.Split(dep, "=")
+				name := depSplitted[0]
+				version := ""
+				if len(depSplitted) > 1 {
+					version = depSplitted[1]
+				}
+				p.dependencies = append(p.dependencies, Dependency{
+					Name:    name,
+					Version: version,
+				})
+			}
+		}
+	}
+
+	return p, nil
 }
 
 func (p *ProjectImpl) Clean() error {
-	os.RemoveAll(filepath.Join(p.Cwd, ".gopath"))
-	os.Remove(filepath.Base(p.Cwd))
+	os.RemoveAll(p.Gopath())
 	return nil
 }

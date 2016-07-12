@@ -20,13 +20,28 @@ func main() {
 		panic(err.Error())
 	}
 
-	tool := &Tool{
-		Project: &ProjectImpl{
-			Cwd: cwd,
-		},
+	logger := (&Logger{
+		Out: os.Stdout,
+		Err: os.Stderr,
+	}).Construct()
+
+	project, err := (&ProjectImpl{
+		Cwd: cwd,
+	}).Construct(logger)
+
+	if err != nil {
+		errHandler(err)
+		return
 	}
 
-	tool.Bootstrap()
+	tool, err := (&Tool{
+		Project: project,
+	}).Construct(logger)
+
+	if err != nil {
+		errHandler(err)
+		return
+	}
 
 	app := &cli.App{
 		Name:    "gopas",
@@ -54,14 +69,8 @@ func main() {
 				Action: tool.DoList,
 			},
 			{
-				Name:  "run",
-				Usage: "run executable",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "exec",
-						Aliases: []string{"x"},
-					},
-				},
+				Name:   "run",
+				Usage:  "run executable",
 				Action: tool.DoRun,
 			},
 			{
@@ -94,29 +103,25 @@ func main() {
 						Aliases: []string{"i"},
 						Value:   cli.NewStringSlice(".git", ".gopath"),
 					},
-				},
-				Subcommands: []*cli.Command{
-					{
-						Name:   "run",
-						Action: tool.DoWatchRun,
-					},
-					{
-						Name:   "build",
-						Action: tool.DoWatchBuild,
-					},
-					{
-						Name:   "test",
-						Action: tool.DoWatchTest,
+					&cli.StringFlag{
+						Name:    "exec",
+						Aliases: []string{"x"},
 					},
 				},
+				Action: tool.DoWatch,
 			},
 		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		if !strings.HasPrefix(err.Error(), "exit status") {
-			fmt.Fprintln(os.Stderr, err.Error())
-		}
-		os.Exit(1)
+		errHandler(err)
+		return
 	}
+}
+
+func errHandler(err error) {
+	if !strings.HasPrefix(err.Error(), "exit status") {
+		fmt.Fprintf(os.Stderr, "--> E %s\n", err.Error())
+	}
+	os.Exit(1)
 }

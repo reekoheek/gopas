@@ -2,9 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,37 +10,18 @@ import (
 )
 
 type Tool struct {
+	*Logger
 	Project Project
-	Out     io.Writer
-	Err     io.Writer
-	iLogger *log.Logger
-	eLogger *log.Logger
 }
 
-func (t *Tool) LogI(format string, args ...interface{}) {
-	t.iLogger.Printf(format, args...)
-}
+func (t *Tool) Construct(logger *Logger) (*Tool, error) {
+	t.Logger = logger
 
-func (t *Tool) Bootstrap() error {
 	if t.Project == nil {
-		return errors.New("Project is undefined")
+		return t, errors.New("Project is undefined")
 	}
 
-	if t.Out == nil {
-		t.Out = os.Stdout
-	}
-
-	if t.Err == nil {
-		t.Err = os.Stderr
-	}
-
-	t.iLogger = log.New(t.Out, "--> I ", log.Lmicroseconds)
-	t.eLogger = log.New(t.Err, "--> E ", log.Lmicroseconds)
-
-	if err := t.Project.Bootstrap(); err != nil {
-		return err
-	}
-	return nil
+	return t, nil
 }
 
 func (t *Tool) DoList(c *cli.Context) error {
@@ -56,81 +34,48 @@ func (t *Tool) DoList(c *cli.Context) error {
 }
 
 func (t *Tool) DoClean(c *cli.Context) error {
-	t.LogI("Cleaning %s ...\n", t.Project.Name())
+	t.LogI("Cleaning %s ...", t.Project.Name())
 	return t.Project.Clean()
 }
 
 func (t *Tool) DoInstall(c *cli.Context) error {
-	t.LogI("Installing %s ...\n", t.Project.Name())
+	t.LogI("Installing %s ...", t.Project.Name())
 	dependencies := t.Project.Dependencies()
 	for _, dep := range dependencies {
-		t.LogI("%s@%s\n", dep.Name, dep.Version)
+		t.LogI("%s@%s", dep.Name, dep.Version)
 		if err := t.Project.Install(dep); err != nil {
-			fmt.Fprintln(t.Err, "=> fail")
+			t.LogE("  => fail, %s", err.Error())
 		} else {
-			fmt.Fprintln(t.Out, "=> ok")
+			t.LogI("  => ok")
 		}
 	}
 	return nil
 }
 
-func (t *Tool) runAsync(c *cli.Context) (*Runner, error) {
-	var args []string
-	if c != nil {
-		args = c.Args().Slice()
-	} else {
-		args = []string{}
-	}
-
-	exec := c.String("exec")
-	if exec == "" {
-		if err := t.DoBuild(c); err != nil {
-			return nil, err
-		}
-
-		t.LogI("Running %s ...\n", t.Project.Name())
-		return t.Project.RunAsync(args)
-	} else {
-		t.LogI("Running %s ...\n", t.Project.Name())
-		execArr := strings.Split(exec, " ")
-		runner := &Runner{
-			Name: execArr[0],
-			Args: execArr[1:],
-		}
-		return runner, runner.Run()
-	}
-}
-
 func (t *Tool) DoRun(c *cli.Context) error {
-	runner, err := t.runAsync(c)
-	if err != nil {
+	if err := t.DoBuild(c); err != nil {
 		return err
 	}
-	if runner != nil {
-		return runner.Wait()
-	} else {
-		return nil
-	}
-}
 
-func (t *Tool) buildAsync(c *cli.Context) (*Runner, error) {
-	t.LogI("Building %s ...\n", t.Project.Name())
-	return t.Project.BuildAsync()
+	t.LogI("Running %s ...\n", t.Project.Name())
+	if c == nil {
+		return t.Project.Run()
+	} else {
+		return t.Project.Run(c.Args().Slice()...)
+	}
 }
 
 func (t *Tool) DoBuild(c *cli.Context) error {
-	runner, err := t.buildAsync(c)
-	if err != nil {
+	t.LogI("Pre Building %s ...\n", t.Project.Name())
+	if err := t.Project.PreBuild(); err != nil {
 		return err
 	}
-	if runner != nil {
-		return runner.Wait()
-	} else {
-		return nil
-	}
+
+	t.LogI("Building %s ...\n", t.Project.Name())
+	return t.Project.Build()
 }
 
-func (t *Tool) testAsync(c *cli.Context) (*Runner, error) {
+func (t *Tool) DoTest(c *cli.Context) error {
 	t.LogI("Testing %s ...\n", t.Project.Name())
 	cover := c.Bool("cover")
 	if cover {
@@ -139,59 +84,45 @@ func (t *Tool) testAsync(c *cli.Context) (*Runner, error) {
 			"Coverage html: %s",
 			filepath.Join(cwd, ".gopath", "src", t.Project.Name(), "cover.html"))
 	}
-	return t.Project.TestAsync(cover)
+	return t.Project.Test(cover)
 }
 
-func (t *Tool) DoTest(c *cli.Context) error {
-	runner, err := t.testAsync(c)
-	if err != nil {
-		return err
+func (t *Tool) DoWatch(c *cli.Context) error {
+	var (
+		exeName string
+		exeArgs []string
+	)
+
+	t.LogI("Watching %s ...\n", t.Project.Name())
+	watcher := &Watcher{
+		Logger:     t.Logger,
+		Watches:    c.StringSlice("watch"),
+		Extensions: strings.Split(c.String("ext"), ","),
+		Ignores:    c.StringSlice("ignore"),
 	}
-	if runner != nil {
-		return runner.Wait()
+
+	exec := c.String("exec")
+	if exec != "" {
+		splitted := strings.Split(exec, " ")
+		exeName = splitted[0]
+		exeArgs = splitted[1:]
 	} else {
-		return nil
-	}
-}
+		slice := c.Args().Slice()
 
-func (t *Tool) DoWatchRun(c *cli.Context) error {
-	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
-	watcher := &Watcher{
-		Watches:    c.StringSlice("watch"),
-		Extensions: strings.Split(c.String("ext"), ","),
-		Ignores:    c.StringSlice("ignore"),
-		LogI:       t.LogI,
+		exeName = os.Args[0]
+		if len(slice) == 0 {
+			exeArgs = []string{"run"}
+		} else {
+			exeArgs = slice
+		}
 	}
 
 	return watcher.Watch(func() (*Runner, error) {
-		return t.runAsync(c)
-	})
-}
-
-func (t *Tool) DoWatchBuild(c *cli.Context) error {
-	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
-	watcher := &Watcher{
-		Watches:    c.StringSlice("watch"),
-		Extensions: strings.Split(c.String("ext"), ","),
-		Ignores:    c.StringSlice("ignore"),
-		LogI:       t.LogI,
-	}
-
-	return watcher.Watch(func() (*Runner, error) {
-		return t.buildAsync(c)
-	})
-}
-
-func (t *Tool) DoWatchTest(c *cli.Context) error {
-	t.LogI("Watching %s %s ...\n", t.Project.Name(), c.Command.Name)
-	watcher := &Watcher{
-		Watches:    c.StringSlice("watch"),
-		Extensions: strings.Split(c.String("ext"), ","),
-		Ignores:    c.StringSlice("ignore"),
-		LogI:       t.LogI,
-	}
-
-	return watcher.Watch(func() (*Runner, error) {
-		return t.testAsync(c)
+		//log.Println(exeName, exeArgs)
+		runner := &Runner{
+			Name: exeName,
+			Args: exeArgs,
+		}
+		return runner, runner.Run()
 	})
 }

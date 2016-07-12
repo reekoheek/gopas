@@ -10,6 +10,7 @@ import (
 )
 
 type test_tool_ProjectMock struct {
+	ProjectImpl
 	isBootstrapped  bool
 	isCleaned       bool
 	isBuilt         bool
@@ -43,19 +44,19 @@ func (p *test_tool_ProjectMock) Name() string {
 	return "foo"
 }
 
-func (p *test_tool_ProjectMock) BuildAsync() (*Runner, error) {
+func (p *test_tool_ProjectMock) Build() error {
 	p.isBuilt = true
-	return nil, nil
+	return nil
 }
 
-func (p *test_tool_ProjectMock) RunAsync(args []string) (*Runner, error) {
+func (p *test_tool_ProjectMock) Run(args ...string) error {
 	p.isRan = true
-	return nil, nil
+	return nil
 }
 
-func (p *test_tool_ProjectMock) TestAsync(cover bool) (*Runner, error) {
+func (p *test_tool_ProjectMock) Test(cover bool) error {
 	p.isTested = true
-	return nil, nil
+	return nil
 }
 
 func test_tool_New() *Tool {
@@ -65,11 +66,13 @@ func test_tool_New() *Tool {
 
 	tool := &Tool{
 		Project: project,
-		Out:     bytes.NewBuffer([]byte{}),
-		Err:     bytes.NewBuffer([]byte{}),
 	}
 
-	tool.Bootstrap()
+	logger := (&Logger{
+		Out: bytes.NewBuffer([]byte{}),
+		Err: bytes.NewBuffer([]byte{}),
+	}).Construct()
+	tool.Construct(logger)
 	return tool
 }
 
@@ -83,16 +86,8 @@ func test_tool_AssertContains(t *testing.T, str string, s string) bool {
 
 func Test_Tool_BootstrapWithoutProject(t *testing.T) {
 	tool := &Tool{}
-	if err := tool.Bootstrap(); err == nil || err.Error() != "Project is undefined" {
-		t.Error("Bootstrap failed")
-	}
-}
-
-func Test_Tool_Bootstrap(t *testing.T) {
-	tool := test_tool_New()
-	if !tool.Project.(*test_tool_ProjectMock).isBootstrapped {
-		t.Error("Project is not bootstrapped yet")
-		return
+	if _, err := tool.Construct(nil); err == nil || err.Error() != "Project is undefined" {
+		t.Error("Construct failed")
 	}
 }
 
