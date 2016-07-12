@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"errors"
@@ -22,7 +22,8 @@ const (
  * Dependency type
  */
 type Dependency struct {
-	Name, Version string
+	Name    string
+	Version string
 }
 
 type Project interface {
@@ -30,7 +31,7 @@ type Project interface {
 	Clean() error
 	Install(dependency Dependency) error
 	Run(args ...string) error
-	Test(cover bool) error
+	Test(cover bool, packages ...string) error
 	PreBuild() error
 	Build() error
 
@@ -41,6 +42,7 @@ type Project interface {
 type ProjectImpl struct {
 	*Logger
 	Cwd          string
+	name         string
 	preBuild     [][]string
 	dependencies []Dependency
 	exeGo        string
@@ -62,7 +64,10 @@ func (p *ProjectImpl) Dir() string {
 }
 
 func (p *ProjectImpl) Name() string {
-	return filepath.Base(p.Cwd)
+	if p.name == "" {
+		p.name = filepath.Base(p.Cwd)
+	}
+	return p.name
 }
 
 func (p *ProjectImpl) Dependencies() []Dependency {
@@ -160,14 +165,26 @@ func (p *ProjectImpl) Run(args ...string) error {
 	return runner.Wait()
 }
 
-func (p *ProjectImpl) Test(cover bool) error {
+func (p *ProjectImpl) Test(cover bool, packages ...string) error {
+	createArgs := func(args []string) []string {
+		args = append(args, packages...)
+		return args
+	}
+
 	if cover {
-		if err := p.GoRun("test", "-coverprofile", "cover.out"); err != nil {
+		args := createArgs([]string{"test", "-coverprofile", "cover.out"})
+		if err := p.GoRun(args...); err != nil {
 			return err
 		}
+
+		if _, err := os.Stat(filepath.Join(p.Dir(), "cover.out")); os.IsNotExist(err) {
+			return nil
+		}
+
 		return p.GoRun("tool", "cover", "-html", "cover.out", "-o", "cover.html")
 	} else {
-		return p.GoRun("test")
+		args := createArgs([]string{"test"})
+		return p.GoRun(args...)
 	}
 }
 
@@ -200,6 +217,30 @@ func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 		}
 	}
 
+	if content, err := ioutil.ReadFile(filepath.Join(p.Cwd, "gopas.yml")); err == nil {
+		config := struct {
+			Name         string
+			PreBuild     [][]string `yaml:"pre-build"`
+			Dependencies []string
+		}{}
+		if err = yaml.Unmarshal(content, &config); err == nil {
+			p.name = config.Name
+			p.preBuild = config.PreBuild
+			for _, dep := range config.Dependencies {
+				depSplitted := strings.Split(dep, "=")
+				name := depSplitted[0]
+				version := ""
+				if len(depSplitted) > 1 {
+					version = depSplitted[1]
+				}
+				p.dependencies = append(p.dependencies, Dependency{
+					Name:    name,
+					Version: version,
+				})
+			}
+		}
+	}
+
 	if err = os.RemoveAll(p.Dir()); err != nil {
 		return p, err
 	}
@@ -222,28 +263,6 @@ func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 	//		os.Symlink(filepath.Join(vendorDir, name), dest)
 	//	}
 	//}
-
-	if content, err := ioutil.ReadFile(filepath.Join(p.Cwd, "gopas.yml")); err == nil {
-		config := struct {
-			PreBuild     [][]string `yaml:"pre-build"`
-			Dependencies []string
-		}{}
-		if err = yaml.Unmarshal(content, &config); err == nil {
-			p.preBuild = config.PreBuild
-			for _, dep := range config.Dependencies {
-				depSplitted := strings.Split(dep, "=")
-				name := depSplitted[0]
-				version := ""
-				if len(depSplitted) > 1 {
-					version = depSplitted[1]
-				}
-				p.dependencies = append(p.dependencies, Dependency{
-					Name:    name,
-					Version: version,
-				})
-			}
-		}
-	}
 
 	return p, nil
 }

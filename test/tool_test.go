@@ -1,4 +1,4 @@
-package main
+package test
 
 /**
  * imports
@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/reekoheek/gopas/util"
 )
 
 type test_tool_ProjectMock struct {
-	ProjectImpl
+	util.ProjectImpl
 	isBootstrapped  bool
 	isCleaned       bool
 	isBuilt         bool
@@ -24,10 +26,10 @@ func (p *test_tool_ProjectMock) Bootstrap() error {
 	return nil
 }
 
-func (p *test_tool_ProjectMock) Dependencies() []Dependency {
-	return []Dependency{
-		Dependency{"github.com/reekoheek/foo", ""},
-		Dependency{"github.com/reekoheek/bar", ""},
+func (p *test_tool_ProjectMock) Dependencies() []util.Dependency {
+	return []util.Dependency{
+		util.Dependency{"github.com/reekoheek/foo", ""},
+		util.Dependency{"github.com/reekoheek/bar", ""},
 	}
 }
 
@@ -36,7 +38,7 @@ func (p *test_tool_ProjectMock) Clean() error {
 	return nil
 }
 
-func (p *test_tool_ProjectMock) Install(dependency Dependency) error {
+func (p *test_tool_ProjectMock) Install(dependency util.Dependency) error {
 	return nil
 }
 
@@ -54,21 +56,21 @@ func (p *test_tool_ProjectMock) Run(args ...string) error {
 	return nil
 }
 
-func (p *test_tool_ProjectMock) Test(cover bool) error {
+func (p *test_tool_ProjectMock) Test(cover bool, packages ...string) error {
 	p.isTested = true
 	return nil
 }
 
-func test_tool_New() *Tool {
+func test_tool_New() *util.Tool {
 	project := &test_tool_ProjectMock{
 		isBootstrapped: false,
 	}
 
-	tool := &Tool{
+	tool := &util.Tool{
 		Project: project,
 	}
 
-	logger := (&Logger{
+	logger := (&util.Logger{
 		Out: bytes.NewBuffer([]byte{}),
 		Err: bytes.NewBuffer([]byte{}),
 	}).Construct()
@@ -85,7 +87,7 @@ func test_tool_AssertContains(t *testing.T, str string, s string) bool {
 }
 
 func Test_Tool_BootstrapWithoutProject(t *testing.T) {
-	tool := &Tool{}
+	tool := &util.Tool{}
 	if _, err := tool.Construct(nil); err == nil || err.Error() != "Project is undefined" {
 		t.Error("Construct failed")
 	}

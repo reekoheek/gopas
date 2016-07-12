@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/reekoheek/gopas/util"
+
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -20,12 +22,12 @@ func main() {
 		panic(err.Error())
 	}
 
-	logger := (&Logger{
+	logger := (&util.Logger{
 		Out: os.Stdout,
 		Err: os.Stderr,
 	}).Construct()
 
-	project, err := (&ProjectImpl{
+	project, err := (&util.ProjectImpl{
 		Cwd: cwd,
 	}).Construct(logger)
 
@@ -34,7 +36,7 @@ func main() {
 		return
 	}
 
-	tool, err := (&Tool{
+	tool, err := (&util.Tool{
 		Project: project,
 	}).Construct(logger)
 
@@ -62,6 +64,11 @@ func main() {
 				Name:   "install",
 				Usage:  "install dependencies",
 				Action: tool.DoInstall,
+			},
+			{
+				Name:   "search",
+				Usage:  "search from cache",
+				Action: tool.DoSearch,
 			},
 			{
 				Name:   "list",

@@ -1,14 +1,16 @@
-package main
+package test
 
 import (
 	"bytes"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/reekoheek/gopas/util"
 )
 
 func Test_Runner_RunWithoutName(t *testing.T) {
-	runner := &Runner{}
+	runner := &util.Runner{}
 	if err := runner.Run(); err == nil || err.Error() != "Name is undefined" {
 		t.Errorf("Must fail if Name is undefined")
 	}
@@ -17,7 +19,7 @@ func Test_Runner_RunWithoutName(t *testing.T) {
 func Test_Runner_Run(t *testing.T) {
 	cwd, err := os.Getwd()
 
-	runner := &Runner{
+	runner := &util.Runner{
 		Name: "pwd",
 		Out:  bytes.NewBuffer([]byte{}),
 	}
@@ -36,7 +38,7 @@ func Test_Runner_Run(t *testing.T) {
 }
 
 func Test_Runner_RunWithEnv(t *testing.T) {
-	runner := &Runner{
+	runner := &util.Runner{
 		Name: "env",
 		Env:  []string{"SOME_SILLY_ENV=foo"},
 		Out:  bytes.NewBuffer([]byte{}),
@@ -60,7 +62,7 @@ func Test_Runner_RunWithEnv(t *testing.T) {
 		return
 	}
 
-	runner = &Runner{
+	runner = &util.Runner{
 		Name: "pwd",
 		Out:  bytes.NewBuffer([]byte{}),
 	}
@@ -79,7 +81,7 @@ func Test_Runner_RunWithEnv(t *testing.T) {
 }
 
 func Test_Runner_RunOverrideEnv(t *testing.T) {
-	runner := &Runner{
+	runner := &util.Runner{
 		Name: "env",
 		Env:  []string{"GOPATH=/foo/bar"},
 		Out:  bytes.NewBuffer([]byte{}),
@@ -100,7 +102,7 @@ func Test_Runner_RunOverrideEnv(t *testing.T) {
 }
 
 func Test_Runner_RunOverrideDir(t *testing.T) {
-	runner := &Runner{
+	runner := &util.Runner{
 		Name: "pwd",
 		Dir:  "/",
 		Out:  bytes.NewBuffer([]byte{}),

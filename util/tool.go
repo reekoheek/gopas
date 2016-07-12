@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"errors"
@@ -36,6 +36,15 @@ func (t *Tool) DoList(c *cli.Context) error {
 func (t *Tool) DoClean(c *cli.Context) error {
 	t.LogI("Cleaning %s ...", t.Project.Name())
 	return t.Project.Clean()
+}
+
+func (t *Tool) DoSearch(c *cli.Context) error {
+	query := ""
+	if c.Args().Len() > 0 {
+		query = c.Args().First()
+	}
+	t.LogI("Searching %s: %s ...", t.Project.Name(), query)
+	return nil
 }
 
 func (t *Tool) DoInstall(c *cli.Context) error {
@@ -84,7 +93,11 @@ func (t *Tool) DoTest(c *cli.Context) error {
 			"Coverage html: %s",
 			filepath.Join(cwd, ".gopath", "src", t.Project.Name(), "cover.html"))
 	}
-	return t.Project.Test(cover)
+	args := []string{}
+	if c != nil {
+		args = c.Args().Slice()
+	}
+	return t.Project.Test(cover, args...)
 }
 
 func (t *Tool) DoWatch(c *cli.Context) error {

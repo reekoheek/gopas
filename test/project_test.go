@@ -1,10 +1,12 @@
-package main
+package test
 
 import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/reekoheek/gopas/util"
 )
 
 const (
@@ -15,7 +17,7 @@ func Test_Project_Dependencies(t *testing.T) {
 	test_project_SetUp()
 	defer test_project_TearDown()
 
-	project, err := (&ProjectImpl{
+	project, err := (&util.ProjectImpl{
 		Cwd: TEST_PROJECT_CWD,
 	}).Construct(nil)
 
