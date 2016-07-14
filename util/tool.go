@@ -49,15 +49,52 @@ func (t *Tool) DoSearch(c *cli.Context) error {
 
 func (t *Tool) DoInstall(c *cli.Context) error {
 	t.LogI("Installing %s ...", t.Project.Name())
+
 	dependencies := t.Project.Dependencies()
 	for _, dep := range dependencies {
 		t.LogI("%s@%s", dep.Name, dep.Version)
-		if err := t.Project.Install(dep); err != nil {
+		if err := t.Project.Get(dep); err != nil {
 			t.LogE("  => fail, %s", err.Error())
 		} else {
 			t.LogI("  => ok")
 		}
 	}
+
+	baseDir := "_vendor/src"
+	filepath.Walk(baseDir, func(path string, fi os.FileInfo, err error) error {
+		if fi != nil && fi.IsDir() && path != baseDir {
+			if fi.Name() == ".git" {
+				return filepath.SkipDir
+			} else {
+				//fmt.Println("{{", path)
+				err := filepath.Walk(path, func(childPath string, fi os.FileInfo, err error) error {
+					if fi.IsDir() {
+						if path == childPath {
+							return nil
+						} else {
+							return filepath.SkipDir
+						}
+						//} else if fi.Name() == ".git" {
+						//	return filepath.SkipDir
+						//}
+					}
+
+					//fmt.Println("  --", childPath, err)
+					if filepath.Ext(childPath) == ".go" {
+						//fmt.Println("  >>", childPath, filepath.Ext(childPath))
+						return errors.New("!!found")
+					}
+					return nil
+				})
+				//fmt.Println("}}", err)
+				if err != nil && err.Error() == "!!found" {
+					t.Project.GoRun("install", path[len(baseDir)+1:])
+					return filepath.SkipDir
+				}
+			}
+		}
+		return nil
+	})
 	return nil
 }
 
@@ -75,6 +112,10 @@ func (t *Tool) DoRun(c *cli.Context) error {
 }
 
 func (t *Tool) DoBuild(c *cli.Context) error {
+	if err := t.DoInstall(c); err != nil {
+		return err
+	}
+
 	t.LogI("Pre Building %s ...\n", t.Project.Name())
 	if err := t.Project.PreBuild(); err != nil {
 		return err

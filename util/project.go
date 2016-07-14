@@ -29,7 +29,7 @@ type Dependency struct {
 type Project interface {
 	Dependencies() []Dependency
 	Clean() error
-	Install(dependency Dependency) error
+	Get(dependency Dependency) error
 	Run(args ...string) error
 	Test(cover bool, packages ...string) error
 	PreBuild() error
@@ -37,30 +37,39 @@ type Project interface {
 
 	Name() string
 	Dir() string
+	GoRun(args ...string) error
 }
 
 type ProjectImpl struct {
 	*Logger
 	Cwd          string
 	name         string
+	gopaths      []string
 	preBuild     [][]string
 	dependencies []Dependency
 	exeGo        string
 }
 
-func (p *ProjectImpl) Gopath() string {
-	return filepath.Join(p.Cwd, ".gopath")
+func (p *ProjectImpl) Gopath() []string {
+	if len(p.gopaths) == 0 {
+		p.gopaths = []string{
+			filepath.Join(p.Cwd, ".gopath"),
+			filepath.Join(p.Cwd, "_vendor"),
+		}
+	}
+
+	return p.gopaths
 }
 
 func (p *ProjectImpl) Env() []string {
 	return []string{
-		"GOPATH=" + p.Gopath(),
-		"GOBIN=" + filepath.Join(p.Gopath(), "bin"),
+		"GOPATH=" + strings.Join(p.Gopath(), ":"),
+		//"GOBIN=" + filepath.Join(p.Gopath(), "bin"),
 	}
 }
 
 func (p *ProjectImpl) Dir() string {
-	return filepath.Join(p.Gopath(), "src", p.Name())
+	return filepath.Join(p.Gopath()[0], "src", p.Name())
 }
 
 func (p *ProjectImpl) Name() string {
@@ -94,7 +103,7 @@ func (p *ProjectImpl) Dependencies() []Dependency {
 	return p.dependencies
 }
 
-func (p *ProjectImpl) Install(dependency Dependency) error {
+func (p *ProjectImpl) Get(dependency Dependency) error {
 	return p.GoRun("get", dependency.Name)
 }
 
@@ -120,7 +129,7 @@ func (p *ProjectImpl) PreBuild() error {
 }
 
 func (p *ProjectImpl) Build() error {
-	return p.GoRun("build")
+	return p.GoRun("install")
 }
 
 func (p *ProjectImpl) GoRun(args ...string) error {
@@ -210,7 +219,7 @@ func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 		return p, errors.New("Please install go")
 	}
 
-	srcDir := filepath.Join(p.Gopath(), "src")
+	srcDir := filepath.Join(p.Gopath()[0], "src")
 	if _, err = os.Stat(srcDir); os.IsNotExist(err) {
 		if os.MkdirAll(srcDir, 0755) != nil {
 			return p, err
@@ -268,6 +277,6 @@ func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 }
 
 func (p *ProjectImpl) Clean() error {
-	os.RemoveAll(p.Gopath())
+	os.RemoveAll(p.Gopath()[0])
 	return nil
 }
