@@ -22,3 +22,17 @@ Actions:
   help     Show help
 ```
 
+## gopas.yml
+
+Specify configuration for project by `gopas.yml` file
+
+```
+name: my.co/myname/mypackage
+
+pre-build:
+    - ["do", "something", "cli", "thing"]
+
+dependencies:
+    - other.co/unknown/app
+    - another.id/some/other
+```

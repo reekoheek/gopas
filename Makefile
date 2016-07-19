@@ -1,10 +1,15 @@
 default: build
 
 build:
+	@echo "==> Bootstrap build"
 	gopas build
 
-install: gopas
-	mv gopas $(GOPATH)/bin
+build-with-self: build
+	@echo "==> Build self"
+	.gopath/bin/gopas build
 
-test:
-	gopas test
+#install: gopas
+#	mv gopas $(GOPATH)/bin
+
+#test:
+#	gopas test

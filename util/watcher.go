@@ -24,6 +24,14 @@ func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 
 	quit := make(chan error, 1)
 
+	w.modifiedTime = time.Now()
+
+	// run the first time
+	go func() {
+		w.Start()
+	}()
+
+	// iterate to run for next times
 	go func() {
 		for {
 			for _, dir := range w.Watches {
@@ -36,7 +44,7 @@ func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 						w.modifiedTime = time.Now()
 						if err := w.Start(); err != nil {
 							quit <- err
-							return errors.New("End of walk")
+							return errors.New("!!End of walk")
 						}
 					}
 					return nil
