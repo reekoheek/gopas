@@ -2,6 +2,7 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,11 +15,14 @@ type Tool struct {
 	Project Project
 }
 
-func (t *Tool) Construct(logger *Logger) (*Tool, error) {
-	t.Logger = logger
+func NewTool(logger *Logger, project Project) (*Tool, error) {
+	if project == nil {
+		return nil, errors.New("Project is undefined")
+	}
 
-	if t.Project == nil {
-		return t, errors.New("Project is undefined")
+	t := &Tool{
+		Logger:  logger,
+		Project: project,
 	}
 
 	return t, nil
@@ -38,14 +42,14 @@ func (t *Tool) DoClean(c *cli.Context) error {
 	return t.Project.Clean()
 }
 
-func (t *Tool) DoSearch(c *cli.Context) error {
-	query := ""
-	if c.Args().Len() > 0 {
-		query = c.Args().First()
-	}
-	t.LogI("Searching %s: %s ...", t.Project.Name(), query)
-	return nil
-}
+//func (t *Tool) DoSearch(c *cli.Context) error {
+//	query := ""
+//	if c.Args().Len() > 0 {
+//		query = c.Args().First()
+//	}
+//	t.LogI("Searching %s: %s ...", t.Project.Name(), query)
+//	return nil
+//}
 
 func (t *Tool) DoInstall(c *cli.Context) error {
 	t.LogI("Installing %s ...", t.Project.Name())
@@ -174,7 +178,7 @@ func (t *Tool) DoWatch(c *cli.Context) error {
 	}
 
 	return watcher.Watch(func() (*Runner, error) {
-		//log.Println(exeName, exeArgs)
+		fmt.Println("")
 		runner := &Runner{
 			Name: exeName,
 			Args: exeArgs,

@@ -41,6 +41,7 @@ func (w *Watcher) Watch(cb func() (*Runner, error)) error {
 					}
 
 					if w.isAcceptable(path) && info.ModTime().After(w.modifiedTime) {
+						w.LogI("[WATCHER] %s modified", path)
 						w.modifiedTime = time.Now()
 						if err := w.Start(); err != nil {
 							quit <- err

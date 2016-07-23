@@ -1,7 +1,6 @@
 package util
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -21,34 +20,36 @@ const (
 /**
  * Dependency type
  */
-type Dependency struct {
-	Name    string
-	Version string
-}
+type (
+	Dependency struct {
+		Name    string
+		Version string
+	}
 
-type Project interface {
-	Dependencies() []Dependency
-	Clean() error
-	Get(dependency Dependency) error
-	Run(args ...string) error
-	Test(cover bool, packages ...string) error
-	PreBuild() error
-	Build() error
+	Project interface {
+		Dependencies() []Dependency
+		Clean() error
+		Get(dependency Dependency) error
+		Run(args ...string) error
+		Test(cover bool, packages ...string) error
+		PreBuild() error
+		Build() error
 
-	Name() string
-	Dir() string
-	GoRun(args ...string) error
-}
+		Name() string
+		Dir() string
+		GoRun(args ...string) error
+	}
 
-type ProjectImpl struct {
-	*Logger
-	Cwd          string
-	name         string
-	gopaths      []string
-	preBuild     [][]string
-	dependencies []Dependency
-	exeGo        string
-}
+	ProjectImpl struct {
+		*Logger
+		Cwd          string
+		name         string
+		gopaths      []string
+		preBuild     [][]string
+		dependencies []Dependency
+		exeGo        string
+	}
+)
 
 func (p *ProjectImpl) Gopath() []string {
 	if len(p.gopaths) == 0 {
@@ -64,7 +65,6 @@ func (p *ProjectImpl) Gopath() []string {
 func (p *ProjectImpl) Env() []string {
 	return []string{
 		"GOPATH=" + strings.Join(p.Gopath(), ":"),
-		//"GOBIN=" + filepath.Join(p.Gopath(), "bin"),
 	}
 }
 
@@ -133,6 +133,9 @@ func (p *ProjectImpl) Build() error {
 }
 
 func (p *ProjectImpl) GoRun(args ...string) error {
+	if err := p.Bootstrap(); err != nil {
+		return err
+	}
 	runner := &Runner{
 		Name: p.exeGo,
 		Args: args,
@@ -197,36 +200,32 @@ func (p *ProjectImpl) Test(cover bool, packages ...string) error {
 	}
 }
 
-/**
- * Construct project options and gopath dir
- */
-func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
-	var err error
+func (p *ProjectImpl) Clean() error {
+	os.RemoveAll(p.Gopath()[0])
+	return nil
+}
 
-	p.Logger = logger
+func (p *ProjectImpl) Bootstrap() error {
+	var (
+		err     error
+		content []byte
+	)
 
-	if "" == p.Cwd {
-		return p, errors.New("Cwd is undefined")
+	if p.exeGo != "" {
+		return nil
 	}
-
-	newCwd, err := filepath.Abs(p.Cwd)
-	if err != nil {
-		panic(err.Error())
-	}
-	p.Cwd = newCwd
-
 	if p.exeGo, err = exec.LookPath("go"); err != nil {
-		return p, errors.New("Please install go")
+		panic("Please install go")
 	}
 
 	srcDir := filepath.Join(p.Gopath()[0], "src")
 	if _, err = os.Stat(srcDir); os.IsNotExist(err) {
 		if os.MkdirAll(srcDir, 0755) != nil {
-			return p, err
+			return err
 		}
 	}
 
-	if content, err := ioutil.ReadFile(filepath.Join(p.Cwd, "gopas.yml")); err == nil {
+	if content, err = ioutil.ReadFile(filepath.Join(p.Cwd, "gopas.yml")); err == nil {
 		config := struct {
 			Name         string
 			PreBuild     [][]string `yaml:"pre-build"`
@@ -251,32 +250,32 @@ func (p *ProjectImpl) Construct(logger *Logger) (*ProjectImpl, error) {
 	}
 
 	if err = os.RemoveAll(p.Dir()); err != nil {
-		return p, err
+		return err
 	}
 
 	if err = copy_folder(p.Cwd, p.Dir()); err != nil {
-		return p, err
+		return err
 	}
 
-	//os.Remove(gopathProjectDir)
-	//if err := os.Symlink(p.Cwd, gopathProjectDir); err != nil {
-	//	panic(err.Error())
-	//}
-	//// FIXME workaround, cannot read module on vendor dir
-	//if files, err := ioutil.ReadDir(vendorDir); err == nil {
-	//	for _, file := range files {
-	//		name := file.Name()
-	//		dest := filepath.Join(gopathSrcDir, name)
-
-	//		os.Remove(dest)
-	//		os.Symlink(filepath.Join(vendorDir, name), dest)
-	//	}
-	//}
-
-	return p, nil
+	return nil
 }
 
-func (p *ProjectImpl) Clean() error {
-	os.RemoveAll(p.Gopath()[0])
-	return nil
+/**
+ * New project options and gopath dir
+ */
+func NewProject(logger *Logger, cwd string) *ProjectImpl {
+	var err error
+
+	if "" == cwd {
+		panic("Cwd is undefined")
+	}
+
+	if cwd, err = filepath.Abs(cwd); err != nil {
+		panic(err.Error())
+	}
+
+	return &ProjectImpl{
+		Logger: logger,
+		Cwd:    cwd,
+	}
 }

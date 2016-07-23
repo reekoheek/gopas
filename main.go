@@ -6,7 +6,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/reekoheek/gopas/util"
 
@@ -17,32 +16,19 @@ import (
  * main function
  */
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
+	var (
+		tool *util.Tool
+		cwd  string
+		err  error
+	)
+
+	if cwd, err = os.Getwd(); err != nil {
 		panic(err.Error())
 	}
 
-	logger := (&util.Logger{
-		Out: os.Stdout,
-		Err: os.Stderr,
-	}).Construct()
-
-	project, err := (&util.ProjectImpl{
-		Cwd: cwd,
-	}).Construct(logger)
-
-	if err != nil {
-		errHandler(err)
-		return
-	}
-
-	tool, err := (&util.Tool{
-		Project: project,
-	}).Construct(logger)
-
-	if err != nil {
-		errHandler(err)
-		return
+	logger := util.NewLogger(os.Stdout, os.Stderr)
+	if tool, err = util.NewTool(logger, util.NewProject(logger, cwd)); err != nil {
+		panic(err.Error())
 	}
 
 	app := &cli.App{
@@ -68,12 +54,12 @@ func main() {
 				Usage:   "install dependencies",
 				Action:  tool.DoInstall,
 			},
-			{
-				Name:    "search",
-				Aliases: []string{"s"},
-				Usage:   "search from cache",
-				Action:  tool.DoSearch,
-			},
+			//{
+			//	Name:    "search",
+			//	Aliases: []string{"s"},
+			//	Usage:   "search from cache",
+			//	Action:  tool.DoSearch,
+			//},
 			{
 				Name:    "list",
 				Aliases: []string{"l"},
@@ -135,14 +121,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		errHandler(err)
-		return
+		fmt.Fprintf(os.Stderr, "Error caught: %s\n", err.Error())
+		os.Exit(1)
 	}
-}
-
-func errHandler(err error) {
-	if !strings.HasPrefix(err.Error(), "exit status") {
-		fmt.Fprintf(os.Stderr, "--> E %s\n", err.Error())
-	}
-	os.Exit(1)
 }

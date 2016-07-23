@@ -19,14 +19,19 @@ func (l *Logger) LogE(format string, args ...interface{}) {
 	l.eLogger.Printf(format, args...)
 }
 
-func (l *Logger) Construct() *Logger {
-	if l.Out == nil {
-		l.Out = os.Stdout
+func NewLogger(out io.Writer, err io.Writer) *Logger {
+	if out == nil {
+		out = os.Stdout
 	}
-	if l.Err == nil {
-		l.Err = os.Stderr
+
+	if err == nil {
+		err = os.Stderr
 	}
-	l.iLogger = log.New(l.Out, "--> I ", log.Lmicroseconds)
-	l.eLogger = log.New(l.Err, "--> E ", log.Lmicroseconds)
-	return l
+
+	return &Logger{
+		Out:     out,
+		Err:     err,
+		iLogger: log.New(out, "--> I ", log.Lmicroseconds),
+		eLogger: log.New(err, "--> E ", log.Lmicroseconds),
+	}
 }
