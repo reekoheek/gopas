@@ -80,6 +80,7 @@ func (p *ProjectImpl) Name() string {
 }
 
 func (p *ProjectImpl) Dependencies() []Dependency {
+	p.Bootstrap()
 	if p.dependencies == nil {
 		p.dependencies = []Dependency{}
 		if fileBytes, err := ioutil.ReadFile(filepath.Join(p.Cwd, GOPASFILE)); err == nil {
