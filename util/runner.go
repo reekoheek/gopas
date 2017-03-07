@@ -35,7 +35,8 @@ func (r *Runner) Run() error {
 		var (
 			stdout io.ReadCloser
 			stderr io.ReadCloser
-			err    error
+			//stdin  io.WriteCloser
+			err error
 		)
 
 		if r.Name == "" {
@@ -63,9 +64,17 @@ func (r *Runner) Run() error {
 			return err
 		}
 
+		// FIXME not working attaching stdin, weird stuff happens
+		///if stdin, err = r.command.StdinPipe(); err != nil {
+		//	return err
+		//}
+
 		if err = r.command.Start(); err != nil {
 			return err
 		}
+
+		// FIXME not working
+		// go io.Copy(stdin, os.Stdin)
 
 		go io.Copy(r.Out, stdout)
 		go io.Copy(r.Err, stderr)
